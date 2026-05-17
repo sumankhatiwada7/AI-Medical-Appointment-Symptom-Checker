@@ -1,7 +1,95 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+model user {
+  id              String           @id @default(uuid())
+  name            String
+  email           String           @unique
+  password        String
+  role            Role             @default(PATIENT)
+  appointments    Appointment[]
+  doctorAppointments Appointment[] @relation("DoctorAppointments")
+  symptoms        Symptom[]
+  symptomCheckers SymptomChecker[]
+  diagnoses       Diagnosis[]
+  //doctorinfo
+  experience       Int?
+  specialization   String?
+
+  refreshToken    String?
+  createdat       DateTime         @default(now())
+}
+
+enum Role {
+  PATIENT
+  DOCTOR
+  ADMIN
+}
+
+model Appointment {
+  id        String   @id @default(uuid())
+  status    String   @default("PENDING")
+
+  userId    String
+  user      user     @relation(fields: [userId], references: [id])
+  doctorId  String
+  doctor    user     @relation("DoctorAppointments", fields: [doctorId], references: [id])
+
+  prescription Prescription[]
+
+  createdat DateTime @default(now())
+}
+
+model Symptom {
+  id          String   @id @default(uuid())
+  userId      String
+  user        user     @relation(fields: [userId], references: [id])
+  name        String
+  description String
+  airesult    String
+  refreshToken String?
+  createdat   DateTime @default(now())
+}
+
+model SymptomChecker {
+  id        String   @id @default(uuid())
+  userId    String
+  user      user     @relation(fields: [userId], references: [id])
+  input     String
+  result    String
+  createdat DateTime @default(now())
+}
+
+model Diagnosis {
+  id          String @id @default(cuid())
+  symptoms    String
+  result      String
+  confidence  Float?
+
+  userId      String
+  user        user   @relation(fields: [userId], references: [id])
+
+  createdAt   DateTime @default(now())
+}
+model Prescription {
+  id          String @id @default(cuid())
+  medicine    String
+  dosage      String
+  instructions String?
+
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+
+  createdAt   DateTime @default(now())
 }
