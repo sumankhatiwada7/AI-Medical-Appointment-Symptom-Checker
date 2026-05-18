@@ -2,15 +2,14 @@ import bcrypt from "bcryptjs";
 import { PrismaPg } from "@prisma/adapter-pg";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import { PrismaClient } from "../../../generated/prisma/client.js";
+import type { Request, Response } from "express";
 const prisma = new PrismaClient({
     adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 });
 import type{ AuthResponse, LoginInput, RegisterInput } from "./auth.type.js";
 import type { apiresponse } from "../../core/types/api.type.ts";
 import type{ inputerror } from "../../core/types/inputerror.type.ts";
-import type { AuthRequest } from "./auth.middleware.js";
 import type { validationerrorresponse } from "../../core/types/inputerror.type.ts";
-import { userInfo } from "node:os";
 
 
 
@@ -42,10 +41,10 @@ function generateRefreshToken(userId: string): string {
     return token;
 }
 
-export const register = async (input:RegisterInput, req: AuthRequest,res: any):Promise<void>=>{
+export const register = async (req: Request, res: Response): Promise<void> => {
     try{
         const errors:inputerror[] = [];
-         const data= input as RegisterInput;
+         const data= req.body as RegisterInput;
          const name =data.name;
          if(!name || name.trim()===""){
             errors.push({message:"Name is required",field:"name"});
@@ -122,12 +121,12 @@ export const register = async (input:RegisterInput, req: AuthRequest,res: any):P
 }
 
 
-export const login = async (input:LoginInput,req:AuthRequest,res:any):Promise<void>=>{
+export const login = async (req: Request, res: Response): Promise<void> => {
     try {
         const errors:inputerror[] = [];
-        const data =input as LoginInput;
+        const data = req.body as LoginInput;
         const emailregix=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if(!data.email || data.email.trim()){
+        if(!data.email || data.email.trim()===""){
             errors.push({message:"Email is required",field:"email"});
 
         }
@@ -190,7 +189,7 @@ export const login = async (input:LoginInput,req:AuthRequest,res:any):Promise<vo
     }
 }
 
-export const refresh=async(req:AuthRequest,res:any):Promise<void>=>{
+export const refresh = async (req: Request, res: Response): Promise<void> => {
     try{
       const refreshToken=req.cookies?.refreshToken||req.body?.refreshToken;
         if(!refreshToken){
