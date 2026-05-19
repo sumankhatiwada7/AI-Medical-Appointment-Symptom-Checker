@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import authRoute from "./module/auth/auth.route";
+import symptomRoute from "./module/symptom/symptom.route";
 import type { ErrorRequestHandler } from "express";
 
 dotenv.config();
@@ -21,7 +22,8 @@ app.get("/health", (_req, res) => {
     res.status(200).json({ status: "ok" });
 });
 
-app.use("/api/auth",authRoute)
+app.use("/api/auth",authRoute);
+app.use("/api/symptom",symptomRoute);
 
 const jsonErrorHandler: ErrorRequestHandler = (err, _req, res, next) => {
     if (err instanceof SyntaxError && "body" in err) {

@@ -27,7 +27,7 @@ export const Login = () => {
     try {
       const response = await login({ email, password });
       setMessage(response.message);
-      navigate("/");
+      navigate("/symptom-checker");
     } catch (error) {
       const authError = error as Error & { fieldErrors?: AuthFieldError[] };
       setMessage(authError.message || "Login failed");

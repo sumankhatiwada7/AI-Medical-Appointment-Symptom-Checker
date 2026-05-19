@@ -27,6 +27,8 @@ model user {
   experience       Int?
   specialization   String?
 
+  symptomSessions SymptomSession[]
+
   refreshToken    String?
   createdat       DateTime         @default(now())
 }
@@ -53,12 +55,16 @@ model Appointment {
 
 model Symptom {
   id          String   @id @default(uuid())
+
   userId      String
-  user        user     @relation(fields: [userId], references: [id])
+  user        user @relation(fields: [userId], references: [id])
+
   name        String
-  description String
-  airesult    String
-  refreshToken String?
+  description String?
+
+  severity    String?
+  duration    String?
+
   createdat   DateTime @default(now())
 }
 
@@ -72,15 +78,21 @@ model SymptomChecker {
 }
 
 model Diagnosis {
-  id          String @id @default(cuid())
-  symptoms    String
-  result      String
-  confidence  Float?
+  id             String   @id @default(cuid())
 
-  userId      String
-  user        user   @relation(fields: [userId], references: [id])
+  symptoms       String
+  result         String
+  confidence     Float?
 
-  createdAt   DateTime @default(now())
+  urgencyLevel   String?
+  doctorType     String?
+
+  aiExplanation  String?
+
+  userId         String
+  user           user @relation(fields: [userId], references: [id])
+
+  createdAt      DateTime @default(now())
 }
 model Prescription {
   id          String @id @default(cuid())
@@ -92,4 +104,20 @@ model Prescription {
   appointment   Appointment @relation(fields: [appointmentId], references: [id])
 
   createdAt   DateTime @default(now())
+}
+model SymptomSession {
+  id               String   @id @default(cuid())
+  userId           String
+  symptoms         Json
+  age              Int
+  gender           String
+  duration         String?
+  severity         String?
+  predictedDisease Json?
+  urgencyLevel     String?
+  aiExplanation    String?
+  recommendedDoctor String?
+  createdAt        DateTime @default(now())
+
+  user              user @relation(fields: [userId], references: [id])
 }
