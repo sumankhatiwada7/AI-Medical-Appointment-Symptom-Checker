@@ -1,10 +1,10 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth, type AuthFieldError } from "../../context/AuthContext";
 
 export const Login = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { isAuthenticated, login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -18,6 +18,12 @@ export const Login = () => {
     }, {});
   }, [fieldErrors]);
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/symptom-checker", { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setMessage("");
@@ -27,7 +33,6 @@ export const Login = () => {
     try {
       const response = await login({ email, password });
       setMessage(response.message);
-      navigate("/symptom-checker");
     } catch (error) {
       const authError = error as Error & { fieldErrors?: AuthFieldError[] };
       setMessage(authError.message || "Login failed");

@@ -1,10 +1,9 @@
-version: "3.9"
-
 services:
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: dev
     container_name: ai-med-backend
     restart: unless-stopped
 
@@ -12,11 +11,15 @@ services:
       - ./backend/.env
 
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       PORT: 3000
 
     ports:
       - "3000:3000"
+
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
 
     depends_on:
       - postgres
@@ -34,23 +37,24 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: dev
     container_name: ai-med-frontend
     restart: unless-stopped
 
     environment:
       NODE_ENV: development
       VITE_API_TARGET: http://backend:3000
+      CHOKIDAR_USEPOLLING: "true"
 
     ports:
       - "5173:5173"
 
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
     depends_on:
       - backend
-    
-    develop:
-      watch:
-        - path: ./frontend/src
-          action: rebuild
 
     networks:
       - ai-med-network

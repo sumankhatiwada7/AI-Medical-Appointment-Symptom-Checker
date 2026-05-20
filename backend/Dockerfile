@@ -1,3 +1,19 @@
+# Development stage
+FROM node:20-alpine AS dev
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+RUN npx prisma generate
+
+EXPOSE 3000
+
+CMD ["sh", "-c", "npm install && npx prisma generate && npm run build && (npm run dev:build & npm run dev:server)"]
+
 # Build stage
 FROM node:20-alpine AS builder
 
@@ -12,7 +28,7 @@ RUN npx prisma generate
 RUN npm run build
 
 # Production stage
-FROM node:20-alpine
+FROM node:20-alpine AS prod
 
 WORKDIR /app
 

@@ -58,7 +58,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
             errors.push({message:"Invalid email format",field:"email"});
         }
         const password=data.password;
-        const passwordregix=/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/;
+        const passwordregix=/^(?=.*[A-Za-z])(?=.*\d).{6,}$/;
         if(!password || password.trim()===""){
             errors.push({message:"Password is required",field:"password"});
         }

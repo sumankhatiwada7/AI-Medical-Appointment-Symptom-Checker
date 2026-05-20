@@ -1,10 +1,10 @@
 import { Request, Response } from "express";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../../../generated/prisma/client.js";
+import { PrismaClient, type Prisma } from "../../../generated/prisma/client.js";
+import { GoogleGenAI } from "@google/genai";
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 });
-import axios from "axios";
 import { Symptominput, Symptomoutput, ErrorResponse, UrgencyLevel, Gender, Severity, PredictedCondition } from "./symptom.type";
 import { calculateUrgency } from "./utils/riskcalculater";
 import { symptomConditionMap } from "./symptom.data";
@@ -100,8 +100,8 @@ export const Symptomanalyze = async (req: Request, res: Response): Promise<void>
     const conditions = matchSymptomToConditions(symptoms);
     const topCondition = conditions?.[0];
 
-    // Step 2 — Generate AI explanation using OpenRouter API
-    const aiPrompt = `You are a medical assistant AI.
+    // Step 2 — Generate AI explanation using Google Gen AI
+    const aiPrompt = `Write a short patient-facing medical guidance note.
 
 Symptoms: ${symptoms.join(", ")}
 Patient Age: ${age}
@@ -111,43 +111,48 @@ Severity Level: ${severity}
 
 Possible conditions: ${JSON.stringify(conditions)}
 
-Please provide:
-- Possible causes of these symptoms
-- Recommended precautions
-- Home care tips
-- When to visit a doctor urgently
-- Suggested foods/activities to avoid
+Return the final guidance only. Do not describe what you will write. Do not write placeholders.
+Use this exact structure:
 
-IMPORTANT: Do NOT provide a definitive diagnosis. This is educational information only.
-Keep the explanation concise and helpful.`;
+Educational note: This is not a diagnosis.
+
+Possible causes:
+- ...
+
+Precautions:
+- ...
+
+Home care:
+- ...
+
+See a doctor urgently if:
+- ...
+
+Avoid:
+- ...
+
+Keep it practical, concise, and specific to the symptoms.`;
 
     let aiExplanation = "Unable to generate AI explanation at this moment.";
 
     try {
-      const aiResponse = await axios.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        {
-          model: "deepseek/deepseek-chat",
-          messages: [
-            {
-              role: "user",
-              content: aiPrompt,
-            },
-          ],
-          max_tokens: 500,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-            "Content-Type": "application/json",
+      const googleApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+      const ai = new GoogleGenAI(googleApiKey ? { apiKey: googleApiKey } : {});
+      const aiResponse = await ai.models.generateContent({
+        model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+        contents: aiPrompt,
+        config: {
+          maxOutputTokens: 900,
+          temperature: 0.4,
+          thinkingConfig: {
+            thinkingBudget: 0,
           },
-          timeout: 30000,
-        }
-      );
+        },
+      });
 
-      aiExplanation = aiResponse.data.choices[0]?.message?.content || aiExplanation;
+      aiExplanation = aiResponse.text?.trim() || aiExplanation;
     } catch (aiError) {
-      console.error("AI API Error:", aiError);
+      console.error("Google Gen AI Error:", aiError);
       // Continue with default explanation if AI API fails
     }
 
@@ -156,6 +161,10 @@ Keep the explanation concise and helpful.`;
 
     // Step 4 — Get recommended doctor
     const recommendedDoctor = getRecommendedDoctor(symptoms);
+    const predictedDiseaseJson: Prisma.InputJsonArray = conditions.map(({ condition, probability }) => ({
+      condition,
+      probability,
+    }));
 
     // Step 5 — Save analysis history to database
     const session = await prisma.symptomSession.create({
@@ -166,7 +175,7 @@ Keep the explanation concise and helpful.`;
         gender,
         duration,
         severity,
-        predictedDisease: conditions,
+        predictedDisease: predictedDiseaseJson,
         urgencyLevel,
         aiExplanation,
         recommendedDoctor,
