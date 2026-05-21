@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth, type AuthFieldError } from "../../context/AuthContext";
+import { getDashboardPath } from "../../utils/authRedirect";
 
 export const Login = () => {
   const navigate = useNavigate();
-  const { isAuthenticated, login } = useAuth();
+  const { isAuthenticated, login, user } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -19,10 +20,10 @@ export const Login = () => {
   }, [fieldErrors]);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate("/symptom-checker", { replace: true });
+    if (isAuthenticated && user) {
+      navigate(getDashboardPath(user.role), { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, user]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -33,6 +34,9 @@ export const Login = () => {
     try {
       const response = await login({ email, password });
       setMessage(response.message);
+      if (response.user) {
+        navigate(getDashboardPath(response.user.role), { replace: true });
+      }
     } catch (error) {
       const authError = error as Error & { fieldErrors?: AuthFieldError[] };
       setMessage(authError.message || "Login failed");
@@ -49,9 +53,7 @@ export const Login = () => {
           <div>
             <p className="text-sm uppercase tracking-[0.35em] text-cyan-300">Welcome back</p>
             <h2 className="mt-6 max-w-md text-4xl font-semibold leading-tight">Sign in to continue your symptom checks and appointments.</h2>
-            <p className="mt-4 max-w-md text-sm leading-6 text-slate-300">
-              Keep your medical workflow in one place and pick up where you left off.
-            </p>
+            <p className="mt-4 max-w-md text-sm leading-6 text-slate-300">Doctors go to the dashboard, patients go to the symptom checker.</p>
           </div>
           <div className="mt-10 rounded-3xl border border-white/10 bg-white/5 p-5 text-sm text-slate-200">
             Backend errors are mapped to the exact field that needs attention.

@@ -19,18 +19,99 @@ model user {
   password        String
   role            Role             @default(PATIENT)
   appointments    Appointment[]
-  doctorAppointments Appointment[] @relation("DoctorAppointments")
   symptoms        Symptom[]
   symptomCheckers SymptomChecker[]
   diagnoses       Diagnosis[]
-  //doctorinfo
-  experience       Int?
-  specialization   String?
+  latitude        Float?
+  longitude       Float?
 
   symptomSessions SymptomSession[]
 
   refreshToken    String?
   createdat       DateTime         @default(now())
+}
+
+model Doctor {
+  id                 String        @id @default(uuid())
+  name               String
+  email              String        @unique
+  phone              String
+  password           String
+  qualifications     String
+  licenseNumber      String        @unique
+  yearsOfExperience  Int
+  latitude           Float
+  longitude          Float
+  consultationFee    Float
+  averageRating     Float    @default(0.0)
+  totalReviews      Int      @default(0)
+  doctorReviews     DoctorReview[]
+  isVerified        Boolean  @default(false)
+  isAvailable       Boolean  @default(true)
+  recommendedSessions RecommendedDoctor[]
+  appointments       Appointment[]
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+}
+model Specialization {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  description String?
+  doctors   DoctorSpecialization[]
+  conditions SpecializationCondition[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+model DoctorSpecialization {
+  id              String   @id @default(cuid())
+  doctorId        String
+  specializationId String
+  isPrimary       Boolean  @default(false)
+  doctor          Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  specialization  Specialization @relation(fields: [specializationId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@unique([doctorId, specializationId])
+}
+model SpecializationCondition {
+  id              String   @id @default(cuid())
+  specializationId String
+  conditionId     String
+  relevanceScore  Float    @default(1.0)
+  specialization  Specialization @relation(fields: [specializationId], references: [id], onDelete: Cascade)
+  condition       MedicalCondition @relation(fields: [conditionId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@unique([specializationId, conditionId])
+}
+model RecommendedDoctor {
+  id              String   @id @default(cuid())
+  sessionId       String   @unique
+  doctorId        String
+  symptoms        String[]
+  matchScore      Float
+  distance        Float?
+  doctor          Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  symptomSession  SymptomSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model SymptomSession {
+  id                String   @id @default(cuid())
+  userId            String
+  symptoms          String[]
+  age               Int
+  gender            String
+  duration          String?
+  severity          String?
+  predictedDisease  Json
+  urgencyLevel      String
+  aiExplanation     String   @db.Text
+  recommendedDoctor String
+  recommendedDoctors RecommendedDoctor[]  // Add this line
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 enum Role {
@@ -46,7 +127,7 @@ model Appointment {
   userId    String
   user      user     @relation(fields: [userId], references: [id])
   doctorId  String
-  doctor    user     @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  doctor    Doctor   @relation(fields: [doctorId], references: [id])
 
   prescription Prescription[]
 
@@ -104,20 +185,4 @@ model Prescription {
   appointment   Appointment @relation(fields: [appointmentId], references: [id])
 
   createdAt   DateTime @default(now())
-}
-model SymptomSession {
-  id               String   @id @default(cuid())
-  userId           String
-  symptoms         Json
-  age              Int
-  gender           String
-  duration         String?
-  severity         String?
-  predictedDisease Json?
-  urgencyLevel     String?
-  aiExplanation    String?
-  recommendedDoctor String?
-  createdAt        DateTime @default(now())
-
-  user              user @relation(fields: [userId], references: [id])
 }

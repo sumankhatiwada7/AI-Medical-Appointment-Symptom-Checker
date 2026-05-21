@@ -4,8 +4,8 @@ export interface usertype{
     name: string;
     password: string;
     role: Role;
-    experience?: number | null;
-    specialization?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
     refreshToken?: string | null;
 }
 export type Role = "PATIENT" | "DOCTOR" | "ADMIN";
@@ -15,8 +15,8 @@ export interface RegisterInput {
     name: string;
     password: string;
     role: Role;
-    experience ?: number;
-    specialization?: string;
+    latitude?: number;
+    longitude?: number;
 }
 export interface LoginInput {
     email: string;

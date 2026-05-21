@@ -1,21 +1,30 @@
-import { useMemo, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth, type AuthFieldError, type UserRole } from "../../context/AuthContext";
+
+
+const normalizeRole = (value: string | null): UserRole => {
+  return value?.toUpperCase() === "DOCTOR" ? "DOCTOR" : "PATIENT";
+};
 
 
 export const Register = () => {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const { register } = useAuth();
+    const roleParam = searchParams.get("role");
 
     const [name,setName]=useState("");
     const [email,setEmail]=useState("");
     const [password,setPassword]=useState("");
-    const [role,setRole]=useState<UserRole>("PATIENT");
-    const [experience,setExperience]=useState<number>(0);
-    const [specialization,setSpecialization]=useState("");
+    const [role,setRole]=useState<UserRole>(() => normalizeRole(roleParam));
     const [message,setMessage]=useState("");
     const [fieldErrors,setFieldErrors]=useState<AuthFieldError[]>([]);
     const [isSubmitting,setIsSubmitting]=useState(false);
+
+    useEffect(() => {
+      setRole(normalizeRole(roleParam));
+    }, [roleParam]);
 
     const errorByField = useMemo(() => {
       return fieldErrors.reduce<Record<string, string>>((acc, error) => {
@@ -34,14 +43,13 @@ export const Register = () => {
             email,
             password,
             role,
-            ...(role==="DOCTOR" ? { experience, specialization } : {}),
         };
 
         try{
         const responseData = await register(data);
         setMessage(responseData.message);
         if(responseData.success){
-          navigate("/login");
+          navigate(`/login?role=${role.toLowerCase()}`);
         }
         }
         catch(error){
@@ -61,7 +69,7 @@ export const Register = () => {
             <p className="text-sm uppercase tracking-[0.35em] text-cyan-300">AI Medical Appointment</p>
             <h2 className="mt-6 max-w-md text-4xl font-semibold leading-tight">Create your account and start checking symptoms with structure.</h2>
             <p className="mt-4 max-w-md text-sm leading-6 text-slate-300">
-              Register once, then keep your medical conversations and appointment flow in one place.
+              Register once, then continue in the correct workspace for your role.
             </p>
           </div>
           <div className="mt-10 rounded-3xl border border-white/10 bg-white/5 p-5 text-sm text-slate-200">
@@ -71,7 +79,7 @@ export const Register = () => {
 
         <div className="p-8 sm:p-10">
           <div className="mb-8">
-            <p className="text-sm font-medium uppercase tracking-[0.3em] text-cyan-700">Register</p>
+            <p className="text-sm font-medium uppercase tracking-[0.3em] text-cyan-700">Register as {role.toLowerCase()}</p>
             <h3 className="mt-3 text-3xl font-semibold text-slate-950">Build your profile</h3>
             <p className="mt-2 text-sm text-slate-500">No client-side validation. Errors come from the backend and show beside the related field.</p>
           </div>
@@ -132,33 +140,6 @@ export const Register = () => {
               </select>
               {errorByField.role && <p className="mt-2 text-sm text-rose-600">{errorByField.role}</p>}
             </div>
-
-            {role==="DOCTOR" && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Experience</label>
-                  <input
-                    type="number"
-                    placeholder="Years"
-                    value={experience}
-                    onChange={(e)=>setExperience(Number(e.target.value))}
-                    className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:ring-4 ${errorByField.experience ? "border-rose-400 bg-rose-50 focus:border-rose-500 focus:ring-rose-100" : "border-slate-200 bg-white focus:border-cyan-500 focus:ring-cyan-100"}`}
-                  />
-                  {errorByField.experience && <p className="mt-2 text-sm text-rose-600">{errorByField.experience}</p>}
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Specialization</label>
-                  <input
-                    type="text"
-                    placeholder="Cardiology, General Medicine, ..."
-                    value={specialization}
-                    onChange={(e)=>setSpecialization(e.target.value)}
-                    className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:ring-4 ${errorByField.specialization ? "border-rose-400 bg-rose-50 focus:border-rose-500 focus:ring-rose-100" : "border-slate-200 bg-white focus:border-cyan-500 focus:ring-cyan-100"}`}
-                  />
-                  {errorByField.specialization && <p className="mt-2 text-sm text-rose-600">{errorByField.specialization}</p>}
-                </div>
-              </div>
-            )}
 
             <button
               type="submit"

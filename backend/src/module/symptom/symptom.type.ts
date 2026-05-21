@@ -24,6 +24,22 @@ export interface PredictedCondition {
   probability: number;
 }
 
+export interface DoctorRecommendation {
+  id: string;
+  name: string;
+  specialization: string;
+  qualifications: string;
+  yearsOfExperience: number;
+  consultationFee: number;
+  clinicName: string;
+  clinicAddress: string;
+  clinicCity: string;
+  clinicState: string;
+  clinicPincode: string;
+  distanceKm: number | null;
+  matchScore: string;
+}
+
 // Interface for symptom session stored in database
 export interface SymptomSession {
   id: string;
@@ -56,6 +72,7 @@ export interface Symptomoutput {
   success: boolean;
   urgencyLevel: UrgencyLevel;
   recommendedDoctor: string;
+  recommendedDoctors?: DoctorRecommendation[];
   predictedDisease: PredictedCondition[];
   aiExplanation: string;
   session: SymptomSession;

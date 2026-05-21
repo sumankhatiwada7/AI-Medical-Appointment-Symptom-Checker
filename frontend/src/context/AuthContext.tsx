@@ -18,8 +18,8 @@ export type AuthUser = {
   email: string;
   name: string;
   role: UserRole;
-  experience?: number | null;
-  specialization?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   refreshToken?: string | null;
 };
 
@@ -31,8 +31,8 @@ export type LoginCredentials = {
 export type RegisterPayload = LoginCredentials & {
   name: string;
   role: UserRole;
-  experience?: number;
-  specialization?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 export type AuthApiResponse = {

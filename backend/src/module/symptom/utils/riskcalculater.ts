@@ -2,13 +2,17 @@ export function calculateUrgency(
   severity?: string,
   probability?: number
 ) {
-  if (severity === "high" && probability && probability > 0.7) {
-    return "HIGH";
+  if (severity === "severe" && probability && probability > 0.7) {
+    return "critical";
   }
 
-  if (severity === "medium") {
-    return "MEDIUM";
+  if (severity === "severe") {
+    return "high";
   }
 
-  return "LOW";
+  if (severity === "moderate") {
+    return "medium";
+  }
+
+  return "low";
 }

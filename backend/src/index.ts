@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import authRoute from "./module/auth/auth.route";
+import doctorRoute from "./module/doctor/doctor.route";
 import symptomRoute from "./module/symptom/symptom.route";
 import type { ErrorRequestHandler } from "express";
 
@@ -23,6 +24,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api/auth",authRoute);
+app.use("/api/doctor",doctorRoute);
 app.use("/api/symptom",symptomRoute);
 
 const jsonErrorHandler: ErrorRequestHandler = (err, _req, res, next) => {

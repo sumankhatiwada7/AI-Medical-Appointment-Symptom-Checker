@@ -19,8 +19,12 @@ function hashPassword(password: string): Promise<string> {
 function comparePassword(password: string, hashedPassword: string): Promise<boolean> {
     return bcrypt.compare(password, hashedPassword);
 }
-function generateToken(userId: string): string {
-    const payload = { id: userId};
+function generateToken(user: { id: string; email: string; role: string }): string {
+    const payload = {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+    };
     const secret = process.env.JWT_SECRET as string;
     const options: SignOptions = { expiresIn: "1h" };
     const token = jwt.sign(payload, secret, options);
@@ -73,8 +77,6 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         else if(!["PATIENT","DOCTOR","ADMIN"].includes(role)){
             errors.push({message:"Role must be either PATIENT, DOCTOR, or ADMIN",field:"role"});
         }
-        const experience=data.experience;
-        const specialization=data.specialization;
         if(errors.length>0){
             const payload:validationerrorresponse={
                 message:"Validation errors",
@@ -99,8 +101,8 @@ export const register = async (req: Request, res: Response): Promise<void> => {
                 email,
                 password:hashedPassword,
                 role,
-                ...(experience !== undefined ? { experience } : {}),
-                ...(specialization !== undefined ? { specialization } : {})
+                ...(data.latitude !== undefined ? { latitude: data.latitude } : {}),
+                ...(data.longitude !== undefined ? { longitude: data.longitude } : {})
             }
         })
         const payload:AuthResponse={
@@ -164,7 +166,11 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             res.status(401).json(payload);
             return;
         }
-        const accesstoken= await generateToken(existingUser.id,);
+        const accesstoken= await generateToken({
+            id: existingUser.id,
+            email: existingUser.email,
+            role: existingUser.role,
+        });
         const refreshtoken= await generateRefreshToken(existingUser.id,);
         const updatedUser = await prisma.user.update({
             where: { id: existingUser.id },
@@ -221,7 +227,11 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
             res.status(401).json(payload);
             return;
         }
-        const newAccessToken=generateToken(user.id);
+        const newAccessToken=generateToken({
+            id: user.id,
+            email: user.email,
+            role: user.role,
+        });
         const newRefreshToken=generateRefreshToken(user.id);
         const updatedUser = await prisma.user.update({
             where: { id: user.id },

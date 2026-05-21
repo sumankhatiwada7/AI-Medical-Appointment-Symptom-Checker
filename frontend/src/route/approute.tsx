@@ -1,53 +1,69 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import type { ReactElement } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth, type UserRole } from "../context/AuthContext";
+import { getDashboardPath } from "../utils/authRedirect";
+import Landing from "../pages/home/landing";
 import Login from "../pages/auth/login";
 import Register from "../pages/auth/register";
 import SymptomChecker from "../pages/symptom/SymptomChecker";
+import DoctorDashboard from "../pages/doctor/dashboard";
 
-const ProtectedRoute = ({ children }: { children: ReactElement }) => {
-  const { loading, isAuthenticated } = useAuth();
+const Loader = () => (
+  <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 text-sm font-medium text-slate-600">
+    Loading your medical workspace...
+  </div>
+);
+
+const ProtectedRoute = ({
+  children,
+  allowedRoles,
+}: {
+  children: ReactElement;
+  allowedRoles?: UserRole[];
+}) => {
+  const { loading, isAuthenticated, user } = useAuth();
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 text-sm font-medium text-slate-600">
-        Loading your medical workspace...
-      </div>
-    );
+    return <Loader />;
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return <Navigate to={getDashboardPath(user.role)} replace />;
   }
 
   return children;
 };
 
 export const AppRoute = () => {
-  const { loading, isAuthenticated } = useAuth();
+  const { loading, isAuthenticated, user } = useAuth();
 
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
       <Route
         path="/"
         element={
-          loading ? (
-            <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 text-sm font-medium text-slate-600">
-              Loading your medical workspace...
-            </div>
-          ) : isAuthenticated ? (
-            <Navigate to="/symptom-checker" replace />
-          ) : (
-            <Register />
-          )
+          loading ? <Loader /> : isAuthenticated && user ? <Navigate to={getDashboardPath(user.role)} replace /> : <Landing />
         }
       />
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
       <Route
         path="/symptom-checker"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={["PATIENT"]}>
             <SymptomChecker />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/doctor-dashboard"
+        element={
+          <ProtectedRoute allowedRoles={["DOCTOR"]}>
+            <DoctorDashboard />
           </ProtectedRoute>
         }
       />
