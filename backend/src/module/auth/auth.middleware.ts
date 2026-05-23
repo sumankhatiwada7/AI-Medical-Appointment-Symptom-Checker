@@ -1,7 +1,7 @@
 import type { Request,Response,NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
-import type { apiresponse } from "../../core/types/api.type.js";
+import type { apiresponse } from "../../core/types/api.type";
 dotenv.config();
 
 

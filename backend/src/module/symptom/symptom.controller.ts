@@ -1,6 +1,5 @@
 import { Request, Response } from "express";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient, Prisma } from "../../../generated/prisma/client.js";
+import { PrismaClient, Prisma } from "@prisma/client";
 import {
   Symptominput,
   Symptomoutput,
@@ -13,43 +12,43 @@ import {
 } from "./symptom.type";
 import { calculateUrgency } from "./utils/riskcalculater";
 import { createAiExplanation } from "./utils/aiprompt";
-import { symptomConditionMap } from "./symptom.data";
-
-const prisma = new PrismaClient({
-  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
-});
+const prisma = new PrismaClient();
 
 type UserLocation = {
   latitude: number | null;
   longitude: number | null;
 };
 
-type DoctorRow = {
-  id: string;
-  name: string;
-  qualifications: string;
-  yearsOfExperience: number;
-  clinicName: string;
-  clinicAddress: string;
-  clinicCity: string;
-  clinicState: string;
-  clinicPincode: string;
-  latitude: number;
-  longitude: number;
-  consultationFee: number;
-};
-
 const normalizeSymptom = (symptom: string) => symptom.toLowerCase().trim();
 
-const matchSymptomToConditions = (symptoms: string[]): PredictedCondition[] => {
+// Match symptoms to conditions from database
+const matchSymptomToConditions = async (symptoms: string[]): Promise<PredictedCondition[]> => {
   const conditionScores: Record<string, number> = {};
 
   for (const symptom of symptoms) {
-    const matches = symptomConditionMap[symptom] || [];
+    const relations = await prisma.symptomConditionRelation.findMany({
+      where: {
+        symptom: {
+          name: {
+            equals: symptom,
+            mode: "insensitive",
+          },
+        },
+      },
+      include: {
+        condition: true,
+      },
+    });
 
-    for (const match of matches) {
-      conditionScores[match.condition] = (conditionScores[match.condition] || 0) + match.probability;
+    // Accumulate probabilities for each condition
+    for (const relation of relations) {
+      const conditionName = relation.condition.name;
+      conditionScores[conditionName] = (conditionScores[conditionName] || 0) + relation.probability;
     }
+  }
+
+  if (Object.keys(conditionScores).length === 0) {
+    return [];
   }
 
   return Object.entries(conditionScores)
@@ -61,50 +60,191 @@ const matchSymptomToConditions = (symptoms: string[]): PredictedCondition[] => {
     .slice(0, 5);
 };
 
-const getRecommendedDoctorType = (symptoms: string[], conditions: PredictedCondition[]): string => {
-  const conditionNames = conditions.map((condition) => condition.condition.toLowerCase());
+// Get recommended doctors from database based on conditions
+const getRecommendedDoctorsFromDb = async (
+  conditions: PredictedCondition[],
+  userId?: string,
+): Promise<DoctorRecommendation[]> => {
+  try {
+    // Find specializations related to the conditions
+    const specializationConditionRelations = await prisma.specializationCondition.findMany({
+      where: {
+        condition: {
+          name: {
+            in: conditions.map((c) => c.condition),
+          },
+        },
+      },
+      include: {
+        specialization: true,
+        condition: true,
+      },
+    });
 
-  if (
-    symptoms.some((symptom) => symptom.includes("chest") || symptom.includes("heart")) ||
-    conditionNames.some((condition) => condition.includes("angina") || condition.includes("heart"))
-  ) {
-    return "Cardiologist";
+    if (specializationConditionRelations.length === 0) {
+      // Fallback to general physicians
+      const generalPhysicians = await prisma.doctor.findMany({
+        where: {
+          isAvailable: true,
+          isVerified: true,
+          specializations: {
+            some: {
+              specialization: {
+                name: "General Physician",
+              },
+            },
+          },
+        },
+        include: {
+          specializations: {
+            include: {
+              specialization: true,
+            },
+          },
+          reviews: true,
+        },
+        take: 5,
+      });
+
+      return generalPhysicians.map((doctor) => ({
+        id: doctor.id,
+        name: `Dr. ${doctor.firstName} ${doctor.lastName}`,
+        specialization: "General Physician",
+        qualifications: doctor.qualifications,
+        yearsOfExperience: doctor.yearsOfExperience,
+        consultationFee: doctor.consultationFee,
+        clinicName: doctor.clinicName || "",
+        clinicAddress: doctor.clinicAddress || "",
+        clinicCity: doctor.clinicCity || "",
+        clinicState: doctor.clinicState || "",
+        clinicPincode: doctor.clinicPincode || "",
+        distanceKm: null,
+        matchScore: "70.0%",
+      }));
+    }
+
+    // Calculate specialization scores
+    const specializationScores: { [specId: string]: { name: string; score: number } } = {};
+
+    for (const relation of specializationConditionRelations) {
+      const matchingCondition = conditions.find((c) => c.condition === relation.condition.name);
+      if (matchingCondition) {
+        const specId = relation.specializationId;
+        if (!specializationScores[specId]) {
+          specializationScores[specId] = {
+            name: relation.specialization.name,
+            score: 0,
+          };
+        }
+        specializationScores[specId].score += matchingCondition.probability * relation.relevanceScore;
+      }
+    }
+
+    // Get doctors with matching specializations
+    const specIds = Object.keys(specializationScores);
+    const doctors = await prisma.doctor.findMany({
+      where: {
+        AND: [
+          {
+              specializations: {
+                some: {
+                  specializationId: {
+                    in: specIds,
+                  },
+                },
+              },
+            },
+            {
+              isAvailable: true,
+              isVerified: true,
+            },
+          ],
+        },
+      include: {
+        specializations: {
+          include: {
+            specialization: true,
+          },
+        },
+        reviews: true,
+      },
+      take: 5,
+    });
+
+    // Get user location if available
+    let userLocation: UserLocation | null = null;
+    if (userId) {
+      const locationData = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { latitude: true, longitude: true },
+      });
+      userLocation = locationData || null;
+    }
+
+    // Calculate match scores and distance
+    return doctors
+      .map((doctor) => {
+        let matchScore = 0;
+        for (const ds of doctor.specializations) {
+          const specScore = specializationScores[ds.specializationId];
+          if (specScore) {
+            matchScore += specScore.score * (ds.isPrimary ? 1.2 : 1);
+          }
+        }
+        matchScore = Math.min(matchScore / doctor.specializations.length, 1);
+
+        // Calculate distance if user location available
+        let distanceKm: number | null = null;
+        if (
+            userLocation &&
+            userLocation.latitude !== null &&
+            userLocation.longitude !== null &&
+            doctor.latitude !== null &&
+            doctor.longitude !== null
+          ) {
+            distanceKm = calculateDistanceKm(
+              userLocation.latitude,
+              userLocation.longitude,
+              doctor.latitude,
+              doctor.longitude,
+            );
+        }
+
+        // Calculate average rating
+        const avgRating =
+          doctor.reviews.length > 0
+            ? doctor.reviews.reduce((sum, review) => sum + review.rating, 0) /
+              doctor.reviews.length
+            : 0;
+        return {
+          id: doctor.id,
+          name: `Dr. ${doctor.firstName} ${doctor.lastName}`,
+          specialization: doctor.specializations.find((ds) => ds.isPrimary)?.specialization.name || "General Physician",
+          qualifications: doctor.qualifications,
+          yearsOfExperience: doctor.yearsOfExperience,
+          consultationFee: doctor.consultationFee,
+          clinicName: doctor.clinicName || "",
+          clinicAddress: doctor.clinicAddress || "",
+          clinicCity: doctor.clinicCity || "",
+          clinicState: doctor.clinicState || "",
+          clinicPincode: doctor.clinicPincode || "",
+          distanceKm: distanceKm ? Number(distanceKm.toFixed(1)) : null,
+          matchScore: ((matchScore * 100).toFixed(1)) + "%",
+          averageRating: parseFloat(avgRating.toFixed(1)),
+        };
+      })
+      .sort((a, b) => {
+        if (a.distanceKm === null && b.distanceKm === null) {
+          return b.yearsOfExperience - a.yearsOfExperience;
+        }
+        if (a.distanceKm === null) return 1;
+        if (b.distanceKm === null) return -1;
+        return a.distanceKm - b.distanceKm;
+      });
+  } catch (error) {
+    console.error("Error getting recommended doctors:", error);
+    return [];
   }
-
-  if (symptoms.includes("skin rash") || conditionNames.some((condition) => condition.includes("eczema"))) {
-    return "Dermatologist";
-  }
-
-  if (
-    symptoms.some((symptom) => symptom.includes("anxiety") || symptom.includes("depression")) ||
-    conditionNames.some((condition) => condition.includes("anxiety") || condition.includes("depression"))
-  ) {
-    return "Psychiatrist";
-  }
-
-  if (
-    symptoms.some((symptom) => symptom.includes("cough") || symptom.includes("fever") || symptom.includes("breath")) ||
-    conditionNames.some((condition) => condition.includes("asthma") || condition.includes("bronchitis"))
-  ) {
-    return "Pulmonologist";
-  }
-
-  if (symptoms.some((symptom) => symptom.includes("sore throat") || symptom.includes("headache"))) {
-    return "ENT Specialist";
-  }
-
-  if (
-    symptoms.some((symptom) => symptom.includes("abdominal") || symptom.includes("nausea") || symptom.includes("vomiting")) ||
-    conditionNames.some((condition) => condition.includes("gastro") || condition.includes("ulcer"))
-  ) {
-    return "Gastroenterologist";
-  }
-
-  if (symptoms.some((symptom) => symptom.includes("joint") || symptom.includes("back"))) {
-    return "Orthopedic Surgeon";
-  }
-
-  return "General Physician";
 };
 
 const calculateDistanceKm = (
@@ -127,126 +267,18 @@ const calculateDistanceKm = (
   return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-const getUserLocation = async (userId: string): Promise<UserLocation | null> => {
-  const rows = await prisma.$queryRaw<UserLocation[]>`
-    SELECT latitude, longitude
-    FROM "user"
-    WHERE id = ${userId}
-    LIMIT 1
-  `;
+// Validate symptoms exist in database
+const validateSymptoms = async (symptoms: string[]): Promise<boolean> => {
+  const validSymptoms = await prisma.symptom.findMany({
+    where: {
+      name: {
+        in: symptoms,
+        mode: "insensitive",
+      },
+    },
+  });
 
-  return rows[0] ?? null;
-};
-
-const findDoctors = async (recommendedDoctorType: string): Promise<DoctorRow[]> => {
-  const searchTerm = `%${recommendedDoctorType.toLowerCase()}%`;
-  const matchingDoctors = await prisma.$queryRaw<DoctorRow[]>`
-    SELECT
-      id,
-      name,
-      qualifications,
-      "yearsOfExperience",
-      "clinicName",
-      "clinicAddress",
-      "clinicCity",
-      "clinicState",
-      "clinicPincode",
-      latitude,
-      longitude,
-      "consultationFee"
-    FROM "Doctor"
-    WHERE LOWER(qualifications) LIKE ${searchTerm}
-    ORDER BY "yearsOfExperience" DESC, "consultationFee" ASC
-    LIMIT 5
-  `;
-
-  if (matchingDoctors.length > 0) {
-    return matchingDoctors;
-  }
-
-  return prisma.$queryRaw<DoctorRow[]>`
-    SELECT
-      id,
-      name,
-      qualifications,
-      "yearsOfExperience",
-      "clinicName",
-      "clinicAddress",
-      "clinicCity",
-      "clinicState",
-      "clinicPincode",
-      latitude,
-      longitude,
-      "consultationFee"
-    FROM "Doctor"
-    ORDER BY "yearsOfExperience" DESC, "consultationFee" ASC
-    LIMIT 5
-  `;
-};
-
-const getRecommendedDoctors = async (
-  symptoms: string[],
-  conditions: PredictedCondition[],
-  userId?: string,
-): Promise<DoctorRecommendation[]> => {
-  try {
-    const recommendedDoctorType = getRecommendedDoctorType(symptoms, conditions);
-    const [doctors, userLocation] = await Promise.all([
-      findDoctors(recommendedDoctorType),
-      userId ? getUserLocation(userId) : Promise.resolve(null),
-    ]);
-
-    return doctors
-      .map((doctor) => {
-        const distanceKm =
-          userLocation?.latitude !== null &&
-          userLocation?.latitude !== undefined &&
-          userLocation?.longitude !== null &&
-          userLocation?.longitude !== undefined
-            ? calculateDistanceKm(userLocation.latitude, userLocation.longitude, doctor.latitude, doctor.longitude)
-            : null;
-
-        const qualificationMatch = doctor.qualifications.toLowerCase().includes(recommendedDoctorType.toLowerCase());
-
-        return {
-          id: doctor.id,
-          name: doctor.name,
-          specialization: recommendedDoctorType,
-          qualifications: doctor.qualifications,
-          yearsOfExperience: doctor.yearsOfExperience,
-          consultationFee: doctor.consultationFee,
-          clinicName: doctor.clinicName,
-          clinicAddress: doctor.clinicAddress,
-          clinicCity: doctor.clinicCity,
-          clinicState: doctor.clinicState,
-          clinicPincode: doctor.clinicPincode,
-          distanceKm: distanceKm === null ? null : Number(distanceKm.toFixed(1)),
-          matchScore: qualificationMatch ? "100.0%" : "70.0%",
-        };
-      })
-      .sort((a, b) => {
-        if (a.distanceKm === null && b.distanceKm === null) {
-          return b.yearsOfExperience - a.yearsOfExperience;
-        }
-
-        if (a.distanceKm === null) {
-          return 1;
-        }
-
-        if (b.distanceKm === null) {
-          return -1;
-        }
-
-        return a.distanceKm - b.distanceKm;
-      });
-  } catch (error) {
-    console.error("Error getting recommended doctors:", error);
-    return [];
-  }
-};
-
-const validateSymptoms = (symptoms: string[]): boolean => {
-  return symptoms.some((symptom) => Boolean(symptomConditionMap[symptom]));
+  return validSymptoms.length > 0;
 };
 
 const isPredictedCondition = (value: unknown): value is PredictedCondition => {
@@ -323,7 +355,8 @@ export const Symptomanalyze = async (req: Request, res: Response): Promise<void>
     const duration = data.duration || "Unknown";
     const severity = (data.severity || Severity.MILD) as Severity;
 
-    if (!validateSymptoms(symptoms)) {
+    // Validate symptoms exist in database
+    if (!(await validateSymptoms(symptoms))) {
       const errorResponse: ErrorResponse = {
         message: "One or more symptoms not found in database. Please check your input.",
         success: false,
@@ -332,7 +365,8 @@ export const Symptomanalyze = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const conditions = matchSymptomToConditions(symptoms);
+    // Match symptoms to conditions from database
+    const conditions = await matchSymptomToConditions(symptoms);
     const topCondition = conditions[0];
 
     if (conditions.length === 0) {
@@ -344,16 +378,21 @@ export const Symptomanalyze = async (req: Request, res: Response): Promise<void>
       return;
     }
 
+    // Generate AI explanation
     const aiExplanation = await createAiExplanation(symptoms, age, gender, duration, severity, conditions);
     const urgencyLevel = calculateUrgency(severity, topCondition?.probability) as UrgencyLevel;
-    const recommendedDoctorsList = await getRecommendedDoctors(symptoms, conditions, userId);
-    const recommendedDoctor =
-      recommendedDoctorsList[0]?.name || getRecommendedDoctorType(symptoms, conditions) || "General Physician";
+
+    // Get recommended doctors from database
+    const recommendedDoctorsList = await getRecommendedDoctorsFromDb(conditions, userId);
+    const recommendedDoctor = recommendedDoctorsList[0]?.name || "General Physician";
+
+    // Prepare data for storage
     const predictedDiseaseJson: Prisma.InputJsonArray = conditions.map(({ condition, probability }) => ({
       condition,
       probability,
     }));
 
+    // Create symptom session
     const session = await prisma.symptomSession.create({
       data: {
         userId,
@@ -368,6 +407,21 @@ export const Symptomanalyze = async (req: Request, res: Response): Promise<void>
         recommendedDoctor,
       },
     });
+
+    // Save recommended doctors to database
+    if (recommendedDoctorsList.length > 0) {
+      for (const recommendedDoc of recommendedDoctorsList) {
+        await prisma.recommendedDoctor.create({
+          data: {
+            sessionId: session.id,
+            doctorId: recommendedDoc.id,
+            symptoms,
+            matchScore: parseFloat(recommendedDoc.matchScore.replace("%", "")),
+            distance: recommendedDoc.distanceKm ?? null,
+          },
+        });
+      }
+    }
 
     const payload: Symptomoutput = {
       message: "Symptoms analyzed successfully",
@@ -423,8 +477,7 @@ export const getRecommendedDoctorsForSession = async (req: Request, res: Respons
     }
 
     const conditions = toPredictedConditions(session.predictedDisease);
-    const symptoms = toSymptomList(session.symptoms);
-    const doctorsList = await getRecommendedDoctors(symptoms, conditions, userId);
+    const doctorsList = await getRecommendedDoctorsFromDb(conditions, userId);
 
     const payload = {
       message: "Recommended doctors retrieved successfully",

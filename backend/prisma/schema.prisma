@@ -1,188 +1,318 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// prisma/schema.prisma - Complete working schema
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-model user {
-  id              String           @id @default(uuid())
-  name            String
-  email           String           @unique
-  password        String
-  role            Role             @default(PATIENT)
-  appointments    Appointment[]
-  symptoms        Symptom[]
-  symptomCheckers SymptomChecker[]
-  diagnoses       Diagnosis[]
-  latitude        Float?
-  longitude       Float?
+// ============ ENUMS ============
 
-  symptomSessions SymptomSession[]
-
-  refreshToken    String?
-  createdat       DateTime         @default(now())
-}
-
-model Doctor {
-  id                 String        @id @default(uuid())
-  name               String
-  email              String        @unique
-  phone              String
-  password           String
-  qualifications     String
-  licenseNumber      String        @unique
-  yearsOfExperience  Int
-  latitude           Float
-  longitude          Float
-  consultationFee    Float
-  averageRating     Float    @default(0.0)
-  totalReviews      Int      @default(0)
-  doctorReviews     DoctorReview[]
-  isVerified        Boolean  @default(false)
-  isAvailable       Boolean  @default(true)
-  recommendedSessions RecommendedDoctor[]
-  appointments       Appointment[]
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
-}
-model Specialization {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  description String?
-  doctors   DoctorSpecialization[]
-  conditions SpecializationCondition[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-model DoctorSpecialization {
-  id              String   @id @default(cuid())
-  doctorId        String
-  specializationId String
-  isPrimary       Boolean  @default(false)
-  doctor          Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-  specialization  Specialization @relation(fields: [specializationId], references: [id], onDelete: Cascade)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  @@unique([doctorId, specializationId])
-}
-model SpecializationCondition {
-  id              String   @id @default(cuid())
-  specializationId String
-  conditionId     String
-  relevanceScore  Float    @default(1.0)
-  specialization  Specialization @relation(fields: [specializationId], references: [id], onDelete: Cascade)
-  condition       MedicalCondition @relation(fields: [conditionId], references: [id], onDelete: Cascade)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  @@unique([specializationId, conditionId])
-}
-model RecommendedDoctor {
-  id              String   @id @default(cuid())
-  sessionId       String   @unique
-  doctorId        String
-  symptoms        String[]
-  matchScore      Float
-  distance        Float?
-  doctor          Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-  symptomSession  SymptomSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-}
-
-model SymptomSession {
-  id                String   @id @default(cuid())
-  userId            String
-  symptoms          String[]
-  age               Int
-  gender            String
-  duration          String?
-  severity          String?
-  predictedDisease  Json
-  urgencyLevel      String
-  aiExplanation     String   @db.Text
-  recommendedDoctor String
-  recommendedDoctors RecommendedDoctor[]  // Add this line
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-}
-
-enum Role {
+enum UserRole {
   PATIENT
   DOCTOR
   ADMIN
 }
 
-model Appointment {
-  id        String   @id @default(uuid())
-  status    String   @default("PENDING")
+// ============ USER MODEL ============
 
-  userId    String
-  user      user     @relation(fields: [userId], references: [id])
-  doctorId  String
-  doctor    Doctor   @relation(fields: [doctorId], references: [id])
+model User {
+  id                String           @id @default(cuid())
+  name              String
+  email             String           @unique
+  password          String
+  role              UserRole         @default(PATIENT)
+  latitude          Float?
+  longitude         Float?
+  refreshToken      String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  // Relations
+  appointments      Appointment[]
+  symptoms          Symptom[]
+  symptomCheckers   SymptomChecker[]
+  diagnoses         Diagnosis[]
+  symptomSessions   SymptomSession[]
 
-  prescription Prescription[]
-
-  createdat DateTime @default(now())
+  @@map("users")
 }
+
+// ============ SYMPTOM MODELS ============
 
 model Symptom {
-  id          String   @id @default(uuid())
+  id                        String                      @id @default(cuid())
+  name                      String                      @unique
+  description               String?
+  createdAt                 DateTime                    @default(now())
+  updatedAt                 DateTime                    @updatedAt
+  
+  // Relations
+  symptoms                  Symptom[]                   @relation("UserSymptoms")
+  relatedTo                 Symptom?                    @relation("UserSymptoms", fields: [relatedToId], references: [id])
+  relatedToId               String?
+  userFromId                User?                       @relation(fields: [userId], references: [id])
+  userId                    String?
+  symptomConditionRelations SymptomConditionRelation[]
 
-  userId      String
-  user        user @relation(fields: [userId], references: [id])
-
-  name        String
-  description String?
-
-  severity    String?
-  duration    String?
-
-  createdat   DateTime @default(now())
+  @@index([name])
+  @@map("symptoms")
 }
 
-model SymptomChecker {
-  id        String   @id @default(uuid())
+model MedicalCondition {
+  id                        String                      @id @default(cuid())
+  name                      String                      @unique
+  description               String?
+  createdAt                 DateTime                    @default(now())
+  updatedAt                 DateTime                    @updatedAt
+  
+  // Relations
+  symptomConditionRelations SymptomConditionRelation[]
+  specializationConditions  SpecializationCondition[]
+
+  @@index([name])
+  @@map("medical_conditions")
+}
+
+model SymptomConditionRelation {
+  id           String           @id @default(cuid())
+  symptomId    String
+  conditionId  String
+  probability  Float            @default(0.5)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  
+  // Relations
+  symptom      Symptom          @relation(fields: [symptomId], references: [id], onDelete: Cascade)
+  condition    MedicalCondition @relation(fields: [conditionId], references: [id], onDelete: Cascade)
+
+  @@unique([symptomId, conditionId])
+  @@index([symptomId])
+  @@index([conditionId])
+  @@map("symptom_condition_relations")
+}
+
+model SymptomSession {
+  id                 String              @id @default(cuid())
+  userId             String
+  symptoms           String[]
+  age                Int
+  gender             String
+  duration           String?
+  severity           String?
+  predictedDisease   Json                // Array of {condition, probability}
+  urgencyLevel       String
+  aiExplanation      String              @db.Text
+  recommendedDoctor  String
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  
+  // Relations
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recommendedDoctors RecommendedDoctor[]
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("symptom_sessions")
+}
+
+// ============ DOCTOR MODELS ============
+
+model Doctor {
+  id                    String                    @id @default(cuid())
+  firstName             String
+  lastName              String
+  email                 String                    @unique
+  phone                 String
+  password              String
+  qualifications        String
+  licenseNumber         String                    @unique
+  yearsOfExperience     Int
+  clinicName            String?
+  clinicAddress         String?
+  clinicCity            String?
+  clinicState           String?
+  clinicPincode         String?
+  latitude              Float
+  longitude             Float
+  consultationFee       Float
+  averageRating         Float                     @default(0.0)
+  totalReviews          Int                       @default(0)
+  isVerified            Boolean                   @default(false)
+  isAvailable           Boolean                   @default(true)
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  
+  // Relations
+  specializations       DoctorSpecialization[]
+  reviews               DoctorReview[]
+  appointments          Appointment[]
+  recommendedSessions   RecommendedDoctor[]
+
+  @@index([email])
+  @@index([licenseNumber])
+  @@index([clinicCity])
+  @@map("doctors")
+}
+
+model Specialization {
+  id                       String                    @id @default(cuid())
+  name                     String                    @unique
+  description              String?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  
+  // Relations
+  doctors                  DoctorSpecialization[]
+  conditions               SpecializationCondition[]
+
+  @@index([name])
+  @@map("specializations")
+}
+
+model DoctorSpecialization {
+  id               String        @id @default(cuid())
+  doctorId         String
+  specializationId String
+  isPrimary        Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  
+  // Relations
+  doctor           Doctor        @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  specialization   Specialization @relation(fields: [specializationId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, specializationId])
+  @@index([doctorId])
+  @@index([specializationId])
+  @@map("doctor_specializations")
+}
+
+model SpecializationCondition {
+  id               String        @id @default(cuid())
+  specializationId String
+  conditionId      String
+  relevanceScore   Float         @default(1.0)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  
+  // Relations
+  specialization   Specialization @relation(fields: [specializationId], references: [id], onDelete: Cascade)
+  condition        MedicalCondition @relation(fields: [conditionId], references: [id], onDelete: Cascade)
+
+  @@unique([specializationId, conditionId])
+  @@index([specializationId])
+  @@index([conditionId])
+  @@map("specialization_conditions")
+}
+
+model DoctorReview {
+  id        String   @id @default(cuid())
+  doctorId  String
   userId    String
-  user      user     @relation(fields: [userId], references: [id])
+  rating    Int      // 1-5 stars
+  comment   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  doctor    Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId])
+  @@index([userId])
+  @@map("doctor_reviews")
+}
+
+model RecommendedDoctor {
+  id             String         @id @default(cuid())
+  sessionId      String         @unique
+  doctorId       String
+  symptoms       String[]
+  matchScore     Float
+  distance       Float?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  
+  // Relations
+  doctor         Doctor         @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  session        SymptomSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId])
+  @@index([sessionId])
+  @@map("recommended_doctors")
+}
+
+// ============ APPOINTMENT MODELS ============
+
+model Appointment {
+  id            String         @id @default(cuid())
+  status        String         @default("PENDING")
+  userId        String
+  doctorId      String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  
+  // Relations
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  doctor        Doctor         @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  prescriptions Prescription[]
+
+  @@index([userId])
+  @@index([doctorId])
+  @@map("appointments")
+}
+
+model Prescription {
+  id            String      @id @default(cuid())
+  medicine      String
+  dosage        String
+  instructions  String?
+  appointmentId String
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  // Relations
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId])
+  @@map("prescriptions")
+}
+
+// ============ OTHER MODELS ============
+
+model SymptomChecker {
+  id        String   @id @default(cuid())
+  userId    String
   input     String
   result    String
-  createdat DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("symptom_checkers")
 }
 
 model Diagnosis {
   id             String   @id @default(cuid())
-
+  userId         String
   symptoms       String
   result         String
   confidence     Float?
-
   urgencyLevel   String?
   doctorType     String?
-
   aiExplanation  String?
-
-  userId         String
-  user           user @relation(fields: [userId], references: [id])
-
   createdAt      DateTime @default(now())
-}
-model Prescription {
-  id          String @id @default(cuid())
-  medicine    String
-  dosage      String
-  instructions String?
+  updatedAt      DateTime @updatedAt
+  
+  // Relations
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  appointmentId String
-  appointment   Appointment @relation(fields: [appointmentId], references: [id])
-
-  createdAt   DateTime @default(now())
+  @@index([userId])
+  @@map("diagnoses")
 }

@@ -29,7 +29,11 @@ export interface DoctorRegistrationInput {
   licenseNumber: string;
   yearsOfExperience: number;
   specializations: string[]; // Array of specialization IDs or names
-  
+  clinicName?: string;
+  clinicAddress?: string;
+  clinicCity?: string;
+  clinicState?: string;
+  clinicPincode?: string;
   latitude?: number;
   longitude?: number;
   consultationFee?: number;
@@ -48,6 +52,10 @@ export interface DoctorProfile {
   yearsOfExperience: number;
   specializations: DoctorSpecializationDetail[];
   clinicName?: string;
+  clinicAddress?: string;
+  clinicCity?: string;
+  clinicState?: string;
+  clinicPincode?: string;
   latitude?: number;
   longitude?: number;
   consultationFee?: number;

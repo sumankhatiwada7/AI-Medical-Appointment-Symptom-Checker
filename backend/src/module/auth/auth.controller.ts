@@ -1,15 +1,12 @@
 import bcrypt from "bcryptjs";
-import { PrismaPg } from "@prisma/adapter-pg";
 import jwt, { type SignOptions } from "jsonwebtoken";
-import { PrismaClient } from "../../../generated/prisma/client.js";
+import { PrismaClient } from "@prisma/client";
 import type { Request, Response } from "express";
-const prisma = new PrismaClient({
-    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
-});
-import type{ AuthResponse, LoginInput, RegisterInput } from "./auth.type.js";
-import type { apiresponse } from "../../core/types/api.type.ts";
-import type{ inputerror } from "../../core/types/inputerror.type.ts";
-import type { validationerrorresponse } from "../../core/types/inputerror.type.ts";
+const prisma = new PrismaClient();
+import type { AuthResponse, LoginInput, RegisterInput } from "./auth.type";
+import type { apiresponse } from "../../core/types/api.type";
+import type { inputerror } from "../../core/types/inputerror.type";
+import type { validationerrorresponse } from "../../core/types/inputerror.type";
 
 
 

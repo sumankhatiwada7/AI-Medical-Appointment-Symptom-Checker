@@ -1,12 +1,10 @@
 import { Request, Response } from "express";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../../../generated/prisma/client.js";
-const prisma = new PrismaClient({
-  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
-});
+import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { DoctorRegistrationInput, DoctorApiResponse, DoctorProfile, RecommendedDoctorResponse } from "./doctor.type";
-import {PredictedCondition} from "../symptom/symptom.type";
+import { DoctorRegistrationInput, DoctorApiResponse, DoctorProfile, DoctorSpecializationDetail, RecommendedDoctorResponse } from "./doctor.type";
+import { PredictedCondition } from "../symptom/symptom.type";
+const prisma = new PrismaClient();
+
 // Helper function to calculate distance between two coordinates (Haversine formula)
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
   const R = 6371; // Earth's radius in km
@@ -74,30 +72,45 @@ export const registerDoctor = async (req: Request, res: Response): Promise<void>
       return;
     }
 
+    if (data.latitude === undefined || data.longitude === undefined || data.consultationFee === undefined) {
+      const errorResponse: DoctorApiResponse<null> = {
+        message: "Latitude, longitude, and consultationFee are required",
+        success: false,
+      };
+      res.status(400).json(errorResponse);
+      return;
+    }
+
     // Hash password
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
     // Create doctor
     const doctor = await prisma.doctor.create({
-      data: ({
+      data: {
         firstName: data.firstName,
         lastName: data.lastName,
         email: data.email,
-        phone: data.phone,
+        phone: data.phone ?? null,
         password: hashedPassword,
         qualifications: data.qualifications,
         licenseNumber: data.licenseNumber,
         yearsOfExperience: data.yearsOfExperience,
-        latitude: data.latitude ?? 0,
-        longitude: data.longitude ?? 0,
-        consultationFee: data.consultationFee ?? 0,
-      } as any),
+        clinicName: data.clinicName ?? null,
+        clinicAddress: data.clinicAddress ?? null,
+        clinicCity: data.clinicCity ?? null,
+        clinicState: data.clinicState ?? null,
+        clinicPincode: data.clinicPincode ?? null,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        consultationFee: data.consultationFee,
+      },
     });
 
     // Link specializations
     if (data.specializations && data.specializations.length > 0) {
       for (let i = 0; i < data.specializations.length; i++) {
         const spec = data.specializations[i];
+        if (!spec) continue;
 
         // Find specialization by name or ID
         const specialization = await prisma.specialization.findFirst({
@@ -118,27 +131,53 @@ export const registerDoctor = async (req: Request, res: Response): Promise<void>
       }
     }
 
+    const profile: DoctorProfile = {
+      id: doctor.id,
+      firstName: doctor.firstName,
+      lastName: doctor.lastName,
+      email: doctor.email,
+      qualifications: doctor.qualifications,
+      licenseNumber: doctor.licenseNumber,
+      yearsOfExperience: doctor.yearsOfExperience,
+      specializations: [] as DoctorSpecializationDetail[],
+      averageRating: doctor.averageRating,
+      totalReviews: doctor.totalReviews,
+      isAvailable: doctor.isAvailable,
+      createdAt: doctor.createdAt,
+    };
+
+    if (doctor.phone) {
+      profile.phone = doctor.phone;
+    }
+    if (doctor.clinicName) {
+      profile.clinicName = doctor.clinicName;
+    }
+    if (doctor.clinicAddress) {
+      profile.clinicAddress = doctor.clinicAddress;
+    }
+    if (doctor.clinicCity) {
+      profile.clinicCity = doctor.clinicCity;
+    }
+    if (doctor.clinicState) {
+      profile.clinicState = doctor.clinicState;
+    }
+    if (doctor.clinicPincode) {
+      profile.clinicPincode = doctor.clinicPincode;
+    }
+    if (doctor.latitude !== null) {
+      profile.latitude = doctor.latitude;
+    }
+    if (doctor.longitude !== null) {
+      profile.longitude = doctor.longitude;
+    }
+    if (doctor.consultationFee !== null) {
+      profile.consultationFee = doctor.consultationFee;
+    }
+
     const successResponse: DoctorApiResponse<DoctorProfile> = {
       message: "Doctor registered successfully",
       success: true,
-      data: {
-        id: doctor.id,
-        firstName: doctor.firstName,
-        lastName: doctor.lastName,
-        email: doctor.email,
-        phone: doctor.phone || undefined,
-        qualifications: doctor.qualifications,
-        licenseNumber: doctor.licenseNumber,
-        yearsOfExperience: doctor.yearsOfExperience,
-        specializations: [],
-        latitude: doctor.latitude || undefined,
-        longitude: doctor.longitude || undefined,
-        consultationFee: doctor.consultationFee || undefined,
-        averageRating: doctor.averageRating,
-        totalReviews: doctor.totalReviews,
-        isAvailable: doctor.isAvailable,
-        createdAt: doctor.createdAt,
-      },
+      data: profile,
     };
 
     res.status(201).json(successResponse);
@@ -158,11 +197,12 @@ export const registerDoctor = async (req: Request, res: Response): Promise<void>
 // Get Doctor Profile
 export const getDoctorProfile = async (req: Request, res: Response): Promise<void> => {
   try {
-    const idParam = req.params.id;
-    const doctorId = Array.isArray(idParam) ? idParam[0] : idParam;
-    if (!doctorId) {
+    const doctorId = req.params.id;
+
+    const doctorIdValue = typeof doctorId === "string" ? doctorId : String(doctorId);
+    if (!doctorIdValue) {
       const errorResponse: DoctorApiResponse<null> = {
-        message: "Invalid doctor id",
+        message: "Doctor id is required",
         success: false,
       };
       res.status(400).json(errorResponse);
@@ -170,15 +210,15 @@ export const getDoctorProfile = async (req: Request, res: Response): Promise<voi
     }
 
     const doctor = await prisma.doctor.findUnique({
-      where: { id: doctorId },
-      include: ({
-        doctorSpecializations: {
+      where: { id: doctorIdValue },
+      include: {
+        specializations: {
           include: {
             specialization: true,
           },
         },
-        doctorReviews: true,
-      } as unknown) as any,
+        reviews: true,
+      },
     });
 
     if (!doctor) {
@@ -192,8 +232,8 @@ export const getDoctorProfile = async (req: Request, res: Response): Promise<voi
 
     // Calculate average rating
     const avgRating =
-      doctor.doctorReviews.length > 0
-        ? doctor.doctorReviews.reduce((sum: any, review: { rating: any; }) => sum + review.rating, 0) / doctor.doctorReviews.length
+      doctor.reviews.length > 0
+        ? doctor.reviews.reduce((sum, review) => sum + review.rating, 0) / doctor.reviews.length
         : 0;
 
     const profile: DoctorProfile = {
@@ -201,21 +241,26 @@ export const getDoctorProfile = async (req: Request, res: Response): Promise<voi
       firstName: doctor.firstName,
       lastName: doctor.lastName,
       email: doctor.email,
-      phone: doctor.phone || undefined,
+      ...(doctor.phone ? { phone: doctor.phone } : {}),
       qualifications: doctor.qualifications,
       licenseNumber: doctor.licenseNumber,
       yearsOfExperience: doctor.yearsOfExperience,
-      specializations: doctor.doctorSpecializations.map((ds: { specialization: { id: any; name: any; description: any; }; isPrimary: any; }) => ({
+      specializations: doctor.specializations.map((ds) => ({
         id: ds.specialization.id,
         name: ds.specialization.name,
         isPrimary: ds.isPrimary,
-        description: ds.specialization.description || undefined,
+        ...(ds.specialization.description ? { description: ds.specialization.description } : {}),
       })),
-      latitude: doctor.latitude || undefined,
-      longitude: doctor.longitude || undefined,
-      consultationFee: doctor.consultationFee || undefined,
+      ...(doctor.clinicName ? { clinicName: doctor.clinicName } : {}),
+      ...(doctor.clinicAddress ? { clinicAddress: doctor.clinicAddress } : {}),
+      ...(doctor.clinicCity ? { clinicCity: doctor.clinicCity } : {}),
+      ...(doctor.clinicState ? { clinicState: doctor.clinicState } : {}),
+      ...(doctor.clinicPincode ? { clinicPincode: doctor.clinicPincode } : {}),
+      ...(doctor.latitude !== null ? { latitude: doctor.latitude } : {}),
+      ...(doctor.longitude !== null ? { longitude: doctor.longitude } : {}),
+      ...(doctor.consultationFee !== null ? { consultationFee: doctor.consultationFee } : {}),
       averageRating: avgRating,
-      totalReviews: doctor.doctorReviews.length,
+      totalReviews: doctor.reviews.length,
       isAvailable: doctor.isAvailable,
       createdAt: doctor.createdAt,
     };
@@ -269,6 +314,7 @@ export const recommendDoctors = async (req: Request, res: Response): Promise<voi
       },
       include: {
         specialization: true,
+        condition: true,
       },
     });
 
@@ -276,27 +322,28 @@ export const recommendDoctors = async (req: Request, res: Response): Promise<voi
     const specializationScores: { [specId: string]: { specialization: any; score: number } } = {};
 
     for (const relation of specializationConditionRelations) {
-      const matchingCondition = conditions.find((c) => c.condition === relation.condition.name);
+      const specializationId = relation.specializationId;
+      if (!specializationId) continue;
+
+      const matchingCondition = conditions.find((c) => c.condition === relation.condition?.name);
       if (matchingCondition) {
-        const key = String(relation.specializationId);
-        if (!specializationScores[key]) {
-          specializationScores[key] = {
+        if (!specializationScores[specializationId]) {
+          specializationScores[specializationId] = {
             specialization: relation.specialization,
             score: 0,
           };
         }
-        // now guaranteed defined
-        specializationScores[key].score += matchingCondition.probability * relation.relevanceScore;
+        specializationScores[specializationId].score += matchingCondition.probability * relation.relevanceScore;
       }
     }
 
     // Get doctors with these specializations
     const specIds = Object.keys(specializationScores);
     const doctors = await prisma.doctor.findMany({
-      where: ({
+      where: {
         AND: [
           {
-            doctorSpecializations: {
+            specializations: {
               some: {
                 specializationId: {
                   in: specIds,
@@ -304,30 +351,34 @@ export const recommendDoctors = async (req: Request, res: Response): Promise<voi
               },
             },
           },
+          {
+            isAvailable: true,
+            isVerified: true,
+          },
         ],
-      } as any),
-      include: ({
-        doctorSpecializations: {
+      },
+      include: {
+        specializations: {
           include: {
             specialization: true,
           },
         },
-        doctorReviews: true,
-      } as unknown) as any,
+        reviews: true,
+      },
     });
 
     // Calculate match scores and distance
     const recommendedDoctors: RecommendedDoctorResponse[] = doctors
-      .map((doctor: { doctorSpecializations: any[]; latitude: number; longitude: number; doctorReviews: any[]; id: any; firstName: any; lastName: any; qualifications: any; clinicName: any; clinicAddress: any; clinicCity: any; consultationFee: any; phone: any; email: any; yearsOfExperience: any; }) => {
+      .map((doctor) => {
         // Calculate match score
         let matchScore = 0;
-        for (const ds of doctor.doctorSpecializations) {
-          const specializationScore = specializationScores[ds.specializationId];
-          if (specializationScore) {
-            matchScore += specializationScore.score * (ds.isPrimary ? 1.2 : 1);
+        for (const ds of doctor.specializations) {
+          const specScore = ds.specializationId ? specializationScores[ds.specializationId] : undefined;
+          if (specScore) {
+            matchScore += specScore.score * (ds.isPrimary ? 1.2 : 1);
           }
         }
-        matchScore = Math.min(matchScore / doctor.doctorSpecializations.length, 1); // Normalize to 0-1
+        matchScore = Math.min(matchScore / doctor.specializations.length, 1); // Normalize to 0-1
 
         // Calculate distance if user location provided
         let distance: number | undefined;
@@ -337,27 +388,30 @@ export const recommendDoctors = async (req: Request, res: Response): Promise<voi
 
         // Calculate average rating
         const avgRating =
-          doctor.doctorReviews.length > 0
-            ? doctor.doctorReviews.reduce((sum, review) => sum + review.rating, 0) / doctor.doctorReviews.length
+          doctor.reviews.length > 0
+            ? doctor.reviews.reduce((sum, review) => sum + review.rating, 0) / doctor.reviews.length
             : 0;
 
         return {
           id: doctor.id,
           name: `Dr. ${doctor.firstName} ${doctor.lastName}`,
           qualifications: doctor.qualifications,
-          specializations: doctor.doctorSpecializations.map((ds: any) => ds.specialization.name),
-          primarySpecialization: doctor.doctorSpecializations.find((ds: any) => ds.isPrimary)?.specialization.name || "",
-          consultationFee: doctor.consultationFee || undefined,
-          phone: doctor.phone || undefined,
+          specializations: doctor.specializations.map((ds) => ds.specialization.name),
+          primarySpecialization: doctor.specializations.find((ds) => ds.isPrimary)?.specialization.name || "",
+          ...(doctor.clinicName ? { clinicName: doctor.clinicName } : {}),
+          ...(doctor.clinicAddress ? { clinicAddress: doctor.clinicAddress } : {}),
+          ...(doctor.clinicCity ? { clinicCity: doctor.clinicCity } : {}),
+          ...(doctor.consultationFee !== null ? { consultationFee: doctor.consultationFee } : {}),
+          ...(doctor.phone ? { phone: doctor.phone } : {}),
           email: doctor.email,
           averageRating: avgRating,
-          totalReviews: doctor.doctorReviews.length,
+          totalReviews: doctor.reviews.length,
           yearsOfExperience: doctor.yearsOfExperience,
           matchScore,
-          distance,
+          ...(distance !== undefined ? { distance } : {}),
         };
       })
-      .sort((a: { matchScore: number; averageRating: number; }, b: { matchScore: number; averageRating: number; }) => {
+      .sort((a, b) => {
         // Sort by match score first, then by rating
         if (b.matchScore !== a.matchScore) {
           return b.matchScore - a.matchScore;
@@ -367,6 +421,15 @@ export const recommendDoctors = async (req: Request, res: Response): Promise<voi
       .slice(0, 10); // Return top 10 doctors
 
     // Save recommendations to database
+    if (!sessionId || Array.isArray(sessionId)) {
+      const errorResponse: DoctorApiResponse<null> = {
+        message: "Session ID is required",
+        success: false,
+      };
+      res.status(400).json(errorResponse);
+      return;
+    }
+
     if (recommendedDoctors.length > 0) {
       for (const recommendedDoc of recommendedDoctors) {
         await prisma.recommendedDoctor.create({
@@ -375,7 +438,7 @@ export const recommendDoctors = async (req: Request, res: Response): Promise<voi
             doctorId: recommendedDoc.id,
             symptoms: conditions.map((c) => c.condition),
             matchScore: recommendedDoc.matchScore,
-            distance: recommendedDoc.distance,
+            distance: recommendedDoc.distance ?? null,
           },
         });
       }
