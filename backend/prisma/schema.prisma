@@ -120,7 +120,11 @@ model SymptomSession {
 }
 
 // ============ DOCTOR MODELS ============
-
+enum DoctorStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
 model Doctor {
   id                    String                    @id @default(cuid())
   firstName             String
@@ -128,6 +132,7 @@ model Doctor {
   email                 String                    @unique
   phone                 String
   password              String
+  Status                DoctorStatus              @default(PENDING)
   qualifications        String
   licenseNumber         String                    @unique
   yearsOfExperience     Int

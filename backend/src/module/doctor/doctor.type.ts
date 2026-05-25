@@ -1,5 +1,5 @@
 // Doctor Types and Interfaces
-
+export type DoctorStatus = "PENDING" | "APPROVED" | "REJECTED";
 export enum AvailabilityDay {
   MONDAY = "monday",
   TUESDAY = "tuesday",
@@ -24,6 +24,7 @@ export interface DoctorRegistrationInput {
   email: string;
   phone: string;
   password: string;
+  status?: DoctorStatus; // Optional, defaults to "PENDING"
   confirmPassword: string;
   qualifications: string;
   licenseNumber: string;

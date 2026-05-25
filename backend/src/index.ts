@@ -6,6 +6,7 @@ import authRoute from "./module/auth/auth.route";
 import doctorRoute from "./module/doctor/doctor.route";
 import symptomRoute from "./module/symptom/symptom.route";
 import type { ErrorRequestHandler } from "express";
+import { createadmin } from "./module/admin/admin.factory";
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -49,4 +50,5 @@ app.use(fallbackErrorHandler);
 
 app.listen(port,()=>{
     console.log(`Server is running on port ${port}`);
+    createadmin();
 })
