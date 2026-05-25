@@ -1,5 +1,7 @@
+import "dotenv/config";
 import { Request, Response } from "express";
-import { PrismaClient, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { prisma } from "../../core/prisma";
 import {
   Symptominput,
   Symptomoutput,
@@ -12,7 +14,6 @@ import {
 } from "./symptom.type";
 import { calculateUrgency } from "./utils/riskcalculater";
 import { createAiExplanation } from "./utils/aiprompt";
-const prisma = new PrismaClient();
 
 type UserLocation = {
   latitude: number | null;

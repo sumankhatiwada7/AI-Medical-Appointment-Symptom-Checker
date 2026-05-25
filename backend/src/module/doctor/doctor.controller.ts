@@ -1,9 +1,9 @@
+import "dotenv/config";
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { prisma } from "../../core/prisma";
 import { DoctorRegistrationInput, DoctorApiResponse, DoctorProfile, DoctorSpecializationDetail, RecommendedDoctorResponse } from "./doctor.type";
 import { PredictedCondition } from "../symptom/symptom.type";
-const prisma = new PrismaClient();
 
 // Helper function to calculate distance between two coordinates (Haversine formula)
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {

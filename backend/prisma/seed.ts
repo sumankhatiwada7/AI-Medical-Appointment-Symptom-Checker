@@ -1,10 +1,8 @@
-// This file should be at: prisma/seed.ts
-// Run with: npx prisma db seed
 
-import { PrismaClient } from "@prisma/client";
+
+import "dotenv/config";
+import { prisma } from "../src/core/prisma";
 import bcrypt from "bcryptjs";
-
-const prisma = new PrismaClient();
 
 // Symptom to Condition mapping data
 const symptomConditionData = [

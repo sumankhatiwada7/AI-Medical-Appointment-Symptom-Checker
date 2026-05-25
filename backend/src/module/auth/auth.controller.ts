@@ -1,8 +1,8 @@
+import "dotenv/config";
 import bcrypt from "bcryptjs";
 import jwt, { type SignOptions } from "jsonwebtoken";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../../core/prisma";
 import type { Request, Response } from "express";
-const prisma = new PrismaClient();
 import type { AuthResponse, LoginInput, RegisterInput } from "./auth.type";
 import type { apiresponse } from "../../core/types/api.type";
 import type { inputerror } from "../../core/types/inputerror.type";

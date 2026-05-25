@@ -1,13 +1,11 @@
+import "dotenv/config";
 import express from "express";
-import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import authRoute from "./module/auth/auth.route";
 import doctorRoute from "./module/doctor/doctor.route";
 import symptomRoute from "./module/symptom/symptom.route";
 import type { ErrorRequestHandler } from "express";
-
-dotenv.config();
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

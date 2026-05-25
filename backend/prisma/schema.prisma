@@ -228,7 +228,7 @@ model DoctorReview {
 
 model RecommendedDoctor {
   id             String         @id @default(cuid())
-  sessionId      String         @unique
+  sessionId      String
   doctorId       String
   symptoms       String[]
   matchScore     Float
@@ -240,6 +240,7 @@ model RecommendedDoctor {
   doctor         Doctor         @relation(fields: [doctorId], references: [id], onDelete: Cascade)
   session        SymptomSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
+  @@unique([sessionId, doctorId])
   @@index([doctorId])
   @@index([sessionId])
   @@map("recommended_doctors")
