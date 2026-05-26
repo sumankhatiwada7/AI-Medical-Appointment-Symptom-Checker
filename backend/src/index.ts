@@ -7,6 +7,7 @@ import doctorRoute from "./module/doctor/doctor.route";
 import symptomRoute from "./module/symptom/symptom.route";
 import type { ErrorRequestHandler } from "express";
 import { createadmin } from "./module/admin/admin.factory";
+import adminRoute from "./module/admin/admin.route";
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -25,7 +26,7 @@ app.get("/health", (_req, res) => {
 app.use("/api/auth",authRoute);
 app.use("/api/doctor",doctorRoute);
 app.use("/api/symptom",symptomRoute);
-
+app.use("/api/admin",adminRoute);
 const jsonErrorHandler: ErrorRequestHandler = (err, _req, res, next) => {
     if (err instanceof SyntaxError && "body" in err) {
         res.status(400).json({
