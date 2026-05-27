@@ -7,6 +7,7 @@ import doctorRoute from "./module/doctor/doctor.route";
 import symptomRoute from "./module/symptom/symptom.route";
 import type { ErrorRequestHandler } from "express";
 import { createadmin } from "./module/admin/admin.factory";
+import { connectPrismaWithRetry } from "./core/prisma";
 import adminRoute from "./module/admin/admin.route";
 const app = express();
 app.use(express.json());
@@ -49,7 +50,12 @@ const fallbackErrorHandler: ErrorRequestHandler = (_err, _req, res, _next) => {
 app.use(jsonErrorHandler);
 app.use(fallbackErrorHandler);
 
-app.listen(port,()=>{
+app.listen(port, async () => {
     console.log(`Server is running on port ${port}`);
-    createadmin();
+    try {
+        await connectPrismaWithRetry();
+        await createadmin();
+    } catch (err) {
+        console.error("Database connection failed during startup:", err);
+    }
 })

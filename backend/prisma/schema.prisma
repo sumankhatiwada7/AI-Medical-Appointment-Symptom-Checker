@@ -144,6 +144,8 @@ model Doctor {
   latitude              Float
   longitude             Float
   consultationFee       Float
+  profileImageUrl       String?
+  validationDocumentUrl String?
   averageRating         Float                     @default(0.0)
   totalReviews          Int                       @default(0)
   isVerified            Boolean                   @default(false)

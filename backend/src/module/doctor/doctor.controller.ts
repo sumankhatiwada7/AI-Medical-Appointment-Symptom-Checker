@@ -2,6 +2,7 @@ import "dotenv/config";
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { prisma } from "../../core/prisma";
+import { uploadToCloudinary } from "../../core/cloudinary";
 import { DoctorRegistrationInput, DoctorApiResponse, DoctorProfile, DoctorSpecializationDetail, RecommendedDoctorResponse } from "./doctor.type";
 import { PredictedCondition } from "../symptom/symptom.type";
 
@@ -23,10 +24,37 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
 // Doctor Registration Controller
 export const registerDoctor = async (req: Request, res: Response): Promise<void> => {
   try {
-    const data = req.body as DoctorRegistrationInput;
+    const dataFromBody = req.body as Partial<DoctorRegistrationInput>;
+    const files = (req as any).files as Record<string, Express.Multer.File[]> | undefined;
+    const profileImageFile = files?.profileImage?.[0];
+    const validationDocumentFile = files?.validationDocument?.[0];
+
+    const latitude = typeof dataFromBody.latitude === "string" ? parseFloat(dataFromBody.latitude) : dataFromBody.latitude;
+    const longitude = typeof dataFromBody.longitude === "string" ? parseFloat(dataFromBody.longitude) : dataFromBody.longitude;
+    const consultationFee = typeof dataFromBody.consultationFee === "string" ? parseFloat(dataFromBody.consultationFee) : dataFromBody.consultationFee;
+    const yearsOfExperience = typeof dataFromBody.yearsOfExperience === "string" ? parseInt(dataFromBody.yearsOfExperience, 10) : dataFromBody.yearsOfExperience;
+    const rawSpecializations = dataFromBody.specializations as string | string[] | undefined;
+    const specializations = Array.isArray(rawSpecializations)
+      ? rawSpecializations.map((spec) => spec.trim()).filter(Boolean)
+      : typeof rawSpecializations === "string"
+      ? rawSpecializations.split(",").map((spec) => spec.trim()).filter(Boolean)
+      : [];
 
     // Validation
-    if (!data.firstName || !data.lastName || !data.email || !data.password) {
+    if (
+      !dataFromBody.firstName ||
+      !dataFromBody.lastName ||
+      !dataFromBody.email ||
+      !dataFromBody.password ||
+      !dataFromBody.confirmPassword ||
+      !dataFromBody.licenseNumber ||
+      !dataFromBody.phone ||
+      !yearsOfExperience ||
+      specializations.length === 0 ||
+      latitude === undefined ||
+      longitude === undefined ||
+      consultationFee === undefined
+    ) {
       const errorResponse: DoctorApiResponse<null> = {
         message: "Missing required fields",
         success: false,
@@ -35,7 +63,7 @@ export const registerDoctor = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    if (data.password !== data.confirmPassword) {
+    if (dataFromBody.password !== dataFromBody.confirmPassword) {
       const errorResponse: DoctorApiResponse<null> = {
         message: "Passwords do not match",
         success: false,
@@ -44,9 +72,39 @@ export const registerDoctor = async (req: Request, res: Response): Promise<void>
       return;
     }
 
+    if (!profileImageFile || !validationDocumentFile) {
+      const errorResponse: DoctorApiResponse<null> = {
+        message: "Profile image and validation document are required",
+        success: false,
+      };
+      res.status(400).json(errorResponse);
+      return;
+    }
+
+    const allowedImageTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    const allowedDocumentTypes = ["application/pdf", "image/jpeg", "image/jpg", "image/png", "image/webp"];
+
+    if (!allowedImageTypes.includes(profileImageFile.mimetype)) {
+      const errorResponse: DoctorApiResponse<null> = {
+        message: "Profile image must be a valid image file",
+        success: false,
+      };
+      res.status(400).json(errorResponse);
+      return;
+    }
+
+    if (!allowedDocumentTypes.includes(validationDocumentFile.mimetype)) {
+      const errorResponse: DoctorApiResponse<null> = {
+        message: "Validation document must be a PDF or image file",
+        success: false,
+      };
+      res.status(400).json(errorResponse);
+      return;
+    }
+
     // Check if email already exists
     const existingDoctor = await prisma.doctor.findUnique({
-      where: { email: data.email },
+      where: { email: dataFromBody.email },
     });
 
     if (existingDoctor) {
@@ -60,7 +118,7 @@ export const registerDoctor = async (req: Request, res: Response): Promise<void>
 
     // Check if license number already exists
     const existingLicense = await prisma.doctor.findUnique({
-      where: { licenseNumber: data.licenseNumber },
+      where: { licenseNumber: dataFromBody.licenseNumber },
     });
 
     if (existingLicense) {
@@ -72,44 +130,40 @@ export const registerDoctor = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    if (data.latitude === undefined || data.longitude === undefined || data.consultationFee === undefined) {
-      const errorResponse: DoctorApiResponse<null> = {
-        message: "Latitude, longitude, and consultationFee are required",
-        success: false,
-      };
-      res.status(400).json(errorResponse);
-      return;
-    }
+    const profileUpload = await uploadToCloudinary(profileImageFile.buffer, "doctor_profiles", "image");
+    const validationUpload = await uploadToCloudinary(validationDocumentFile.buffer, "doctor_validation_documents", "auto");
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(data.password, 10);
+    const hashedPassword = await bcrypt.hash(dataFromBody.password, 10);
 
     // Create doctor
     const doctor = await prisma.doctor.create({
       data: {
-        firstName: data.firstName,
-        lastName: data.lastName,
-        email: data.email,
-        phone: data.phone ?? null,
+        firstName: dataFromBody.firstName,
+        lastName: dataFromBody.lastName,
+        email: dataFromBody.email,
+        phone: dataFromBody.phone,
         password: hashedPassword,
-        qualifications: data.qualifications,
-        licenseNumber: data.licenseNumber,
-        yearsOfExperience: data.yearsOfExperience,
-        clinicName: data.clinicName ?? null,
-        clinicAddress: data.clinicAddress ?? null,
-        clinicCity: data.clinicCity ?? null,
-        clinicState: data.clinicState ?? null,
-        clinicPincode: data.clinicPincode ?? null,
-        latitude: data.latitude,
-        longitude: data.longitude,
-        consultationFee: data.consultationFee,
+        qualifications: dataFromBody.qualifications ?? "",
+        licenseNumber: dataFromBody.licenseNumber,
+        yearsOfExperience: yearsOfExperience,
+        clinicName: dataFromBody.clinicName ?? null,
+        clinicAddress: dataFromBody.clinicAddress ?? null,
+        clinicCity: dataFromBody.clinicCity ?? null,
+        clinicState: dataFromBody.clinicState ?? null,
+        clinicPincode: dataFromBody.clinicPincode ?? null,
+        latitude: latitude,
+        longitude: longitude,
+        consultationFee: consultationFee,
+        profileImageUrl: profileUpload.secure_url,
+        validationDocumentUrl: validationUpload.secure_url,
       },
     });
 
     // Link specializations
-    if (data.specializations && data.specializations.length > 0) {
-      for (let i = 0; i < data.specializations.length; i++) {
-        const spec = data.specializations[i];
+    if (specializations.length > 0) {
+      for (let i = 0; i < specializations.length; i++) {
+        const spec = specializations[i];
         if (!spec) continue;
 
         // Find specialization by name or ID
@@ -124,7 +178,7 @@ export const registerDoctor = async (req: Request, res: Response): Promise<void>
             data: {
               doctorId: doctor.id,
               specializationId: specialization.id,
-              isPrimary: i === 0, // First one is primary
+              isPrimary: i === 0,
             },
           });
         }
@@ -145,6 +199,13 @@ export const registerDoctor = async (req: Request, res: Response): Promise<void>
       isAvailable: doctor.isAvailable,
       createdAt: doctor.createdAt,
     };
+
+    if (doctor.profileImageUrl) {
+      profile.profileImageUrl = doctor.profileImageUrl;
+    }
+    if (doctor.validationDocumentUrl) {
+      profile.validationDocumentUrl = doctor.validationDocumentUrl;
+    }
 
     if (doctor.phone) {
       profile.phone = doctor.phone;
@@ -256,6 +317,8 @@ export const getDoctorProfile = async (req: Request, res: Response): Promise<voi
       ...(doctor.clinicCity ? { clinicCity: doctor.clinicCity } : {}),
       ...(doctor.clinicState ? { clinicState: doctor.clinicState } : {}),
       ...(doctor.clinicPincode ? { clinicPincode: doctor.clinicPincode } : {}),
+      ...(doctor.profileImageUrl ? { profileImageUrl: doctor.profileImageUrl } : {}),
+      ...(doctor.validationDocumentUrl ? { validationDocumentUrl: doctor.validationDocumentUrl } : {}),
       ...(doctor.latitude !== null ? { latitude: doctor.latitude } : {}),
       ...(doctor.longitude !== null ? { longitude: doctor.longitude } : {}),
       ...(doctor.consultationFee !== null ? { consultationFee: doctor.consultationFee } : {}),

@@ -60,6 +60,8 @@ export interface DoctorProfile {
   latitude?: number;
   longitude?: number;
   consultationFee?: number;
+  profileImageUrl?: string;
+  validationDocumentUrl?: string;
   averageRating: number;
   totalReviews: number;
   isAvailable: boolean;
@@ -113,6 +115,7 @@ export interface RecommendedDoctorResponse {
   primarySpecialization: string;
   consultationFee?: number;
   phone?: string;
+  profileImageUrl?: string;
   email: string;
   averageRating: number;
   totalReviews: number;
