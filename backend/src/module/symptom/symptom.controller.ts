@@ -119,6 +119,7 @@ const getRecommendedDoctorsFromDb = async (
         clinicCity: doctor.clinicCity || "",
         clinicState: doctor.clinicState || "",
         clinicPincode: doctor.clinicPincode || "",
+        ...(doctor.profileImageUrl ? { profileImageUrl: doctor.profileImageUrl } : {}),
         distanceKm: null,
         matchScore: "70.0%",
       }));
@@ -229,6 +230,7 @@ const getRecommendedDoctorsFromDb = async (
           clinicCity: doctor.clinicCity || "",
           clinicState: doctor.clinicState || "",
           clinicPincode: doctor.clinicPincode || "",
+          ...(doctor.profileImageUrl ? { profileImageUrl: doctor.profileImageUrl } : {}),
           distanceKm: distanceKm ? Number(distanceKm.toFixed(1)) : null,
           matchScore: ((matchScore * 100).toFixed(1)) + "%",
           averageRating: parseFloat(avgRating.toFixed(1)),

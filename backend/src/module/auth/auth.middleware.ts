@@ -2,6 +2,7 @@ import type { Request,Response,NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import type { apiresponse } from "../../core/types/api.type";
+import { prisma } from "../../core/prisma";
 dotenv.config();
 
 
@@ -14,7 +15,7 @@ user?:{
     role: string;
 };
 }
-export const authMiddleware = (req:AuthRequest,res:Response,next:NextFunction):void=>{
+export const authMiddleware = async (req:AuthRequest,res:Response,next:NextFunction):Promise<void>=>{
     try{
       const authHeader = req.headers.authorization?.split(' ')[1];
       if(!authHeader){
@@ -27,10 +28,37 @@ export const authMiddleware = (req:AuthRequest,res:Response,next:NextFunction):v
       }
       const secret = process.env.JWT_SECRET as string;
       const decoded = jwt.verify(authHeader,secret) as {id:string,email:string,role:string};
-      req.user=decoded;
+      const user = await prisma.user.findUnique({
+        where: { id: decoded.id },
+        select: { id: true, email: true, role: true },
+      });
+
+      if (!user) {
+        const payload: apiresponse = {
+          message: "Invalid or expired token",
+          success: false,
+        };
+        res.status(401).json(payload);
+        return;
+      }
+
+      req.user={
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      };
       next();
     }
     catch(error){
+      if (error instanceof Error && ["JsonWebTokenError", "TokenExpiredError"].includes(error.name)) {
+        const payload: apiresponse = {
+          message: "Invalid or expired token",
+          success: false,
+        };
+        res.status(401).json(payload);
+        return;
+      }
+
       const payload:apiresponse={
         message:"SERVER ERROR",
         success:false

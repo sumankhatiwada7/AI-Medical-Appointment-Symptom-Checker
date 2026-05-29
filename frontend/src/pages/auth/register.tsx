@@ -5,6 +5,10 @@ import { useAuth, type AuthFieldError, type UserRole } from "../../context/AuthC
 const normalizeRole = (value: string | null): UserRole => {
   return value?.toUpperCase() === "DOCTOR" ? "DOCTOR" : "PATIENT";
 };
+type location ={
+  latitude:Float64Array;
+  longitude:Float64Array;
+}
 
 type DoctorRegisterErrors = Record<string, string>;
 
@@ -13,13 +17,12 @@ export const Register = () => {
   const [searchParams] = useSearchParams();
   const { register } = useAuth();
   const roleParam = searchParams.get("role");
-
   const [role, setRole] = useState<UserRole>(() => normalizeRole(roleParam));
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
+  const [location,setlocation]=useState<location | "">("");
   const [doctorFirstName, setDoctorFirstName] = useState("");
   const [doctorLastName, setDoctorLastName] = useState("");
   const [doctorPhone, setDoctorPhone] = useState("");
@@ -32,16 +35,14 @@ export const Register = () => {
   const [clinicCity, setClinicCity] = useState("");
   const [clinicState, setClinicState] = useState("");
   const [clinicPincode, setClinicPincode] = useState("");
-  const [latitude, setLatitude] = useState("");
-  const [longitude, setLongitude] = useState("");
   const [consultationFee, setConsultationFee] = useState("");
   const [profileImage, setProfileImage] = useState<File | null>(null);
   const [validationDocument, setValidationDocument] = useState<File | null>(null);
-
   const [message, setMessage] = useState("");
   const [fieldErrors, setFieldErrors] = useState<AuthFieldError[]>([]);
   const [doctorFieldErrors, setDoctorFieldErrors] = useState<DoctorRegisterErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error,seterror]=useState("")
 
   useEffect(() => {
     setRole(normalizeRole(roleParam));
@@ -53,7 +54,19 @@ export const Register = () => {
       return acc;
     }, {});
   }, [fieldErrors]);
-
+ const getloocation =()=>{
+  if(!navigator.geolocation){
+      seterror("Geolocation is not supported by your browser");
+  }
+  navigator.geolocation.getCurrentPosition(async(position)=>{
+    const cords:location ={
+      latitude:new Float64Array([position.coords.latitude]),
+      longitude:new Float64Array([position.coords.longitude])
+    }
+    console.log(cords);
+    setlocation(cords);
+  });
+ }
   const handleDoctorRegister = async (formData: FormData) => {
     const response = await fetch("/api/doctor/register", {
       method: "POST",
@@ -84,8 +97,7 @@ export const Register = () => {
           email,
           password,
           role,
-          latitude: latitude ? Number(latitude) : undefined,
-          longitude: longitude ? Number(longitude) : undefined,
+          location: location ? { latitude: location.latitude[0], longitude: location.longitude[0] } : undefined,
         };
         const responseData = await register(data);
         setMessage(responseData.message);
@@ -109,8 +121,8 @@ export const Register = () => {
         formData.append("clinicCity", clinicCity);
         formData.append("clinicState", clinicState);
         formData.append("clinicPincode", clinicPincode);
-        formData.append("latitude", latitude);
-        formData.append("longitude", longitude);
+        formData.append("latitude", location ? location.latitude[0].toString() : "");
+        formData.append("longitude", location ? location.longitude[0].toString() : "");
         formData.append("consultationFee", consultationFee);
         if (profileImage) {
           formData.append("profileImage", profileImage);
@@ -201,30 +213,6 @@ export const Register = () => {
                     className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:ring-4 ${errorByField.name ? "border-rose-400 bg-rose-50 focus:border-rose-500 focus:ring-rose-100" : "border-slate-200 bg-white focus:border-cyan-500 focus:ring-cyan-100"}`}
                   />
                   {errorByField.name && <p className="mt-2 text-sm text-rose-600">{errorByField.name}</p>}
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Latitude (optional)</label>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="e.g. 37.7749"
-                    value={latitude}
-                    onChange={(e) => setLatitude(e.target.value)}
-                    className="w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Longitude (optional)</label>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="e.g. -122.4194"
-                    value={longitude}
-                    onChange={(e) => setLongitude(e.target.value)}
-                    className="w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-                  />
                 </div>
               </>
             ) : (
@@ -374,28 +362,7 @@ export const Register = () => {
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-3">
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-700">Latitude</label>
-                    <input
-                      type="number"
-                      step="any"
-                      placeholder="Latitude"
-                      value={latitude}
-                      onChange={(e) => setLatitude(e.target.value)}
-                      className="w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-700">Longitude</label>
-                    <input
-                      type="number"
-                      step="any"
-                      placeholder="Longitude"
-                      value={longitude}
-                      onChange={(e) => setLongitude(e.target.value)}
-                      className="w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-                    />
-                  </div>
+                
                   <div>
                     <label className="mb-2 block text-sm font-medium text-slate-700">Consultation fee</label>
                     <input
@@ -468,6 +435,13 @@ export const Register = () => {
                 />
               </div>
             </div>
+
+            <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">location </label>
+                  <button type="button" onClick={getloocation} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300">
+                    Get Location
+                  </button>
+                </div>
 
             <button
               type="submit"

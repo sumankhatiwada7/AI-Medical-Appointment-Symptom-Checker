@@ -36,6 +36,7 @@ export interface DoctorRecommendation {
   clinicCity: string;
   clinicState: string;
   clinicPincode: string;
+  profileImageUrl?: string;
   distanceKm: number | null;
   matchScore: string;
 }

@@ -545,7 +545,6 @@ async function main() {
           });
         }
       }
-
       console.log(`✓ Dr. ${doctor.firstName} ${doctor.lastName}`);
     }
 

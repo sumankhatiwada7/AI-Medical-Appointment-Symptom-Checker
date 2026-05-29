@@ -11,11 +11,29 @@ type PredictedCondition = {
   probability: number;
 };
 
+type RecommendedDoctor = {
+  id: string;
+  name: string;
+  specialization: string;
+  qualifications: string;
+  yearsOfExperience: number;
+  consultationFee: number;
+  clinicName: string;
+  clinicAddress: string;
+  clinicCity: string;
+  clinicState: string;
+  clinicPincode: string;
+  profileImageUrl?: string;
+  distanceKm: number | null;
+  matchScore: string;
+};
+
 type SymptomAnalysisResponse = {
   message: string;
   success: boolean;
   urgencyLevel: UrgencyLevel;
   recommendedDoctor: string;
+  recommendedDoctors?: RecommendedDoctor[];
   predictedDisease: PredictedCondition[];
   aiExplanation: string;
 };
@@ -55,6 +73,30 @@ async function readSymptomResponse(response: Response): Promise<SymptomAnalysisR
   return data as SymptomAnalysisResponse;
 }
 
+function getDoctorInitials(name: string) {
+  return name
+    .replace(/^Dr\.\s*/i, "")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
+
+function formatDoctorLocation(doctor: RecommendedDoctor) {
+  const cityState = [doctor.clinicCity, doctor.clinicState].filter(Boolean).join(", ");
+
+  return cityState || doctor.clinicAddress || "Location not available";
+}
+
+function formatDoctorDistance(distanceKm: number | null) {
+  if (distanceKm === null) {
+    return "Distance not available";
+  }
+
+  return `${distanceKm.toFixed(1)} km away`;
+}
+
 export const SymptomChecker = () => {
   const { token, user, logout } = useAuth();
   const [symptomInput, setSymptomInput] = useState("");
@@ -72,6 +114,10 @@ export const SymptomChecker = () => {
 
   const sortedConditions = useMemo(() => {
     return result?.predictedDisease ?? [];
+  }, [result]);
+
+  const recommendedDoctors = useMemo(() => {
+    return result?.recommendedDoctors ?? [];
   }, [result]);
 
   const addSymptom = (value: string) => {
@@ -305,6 +351,79 @@ export const SymptomChecker = () => {
               {isSubmitting ? "Analyzing symptoms..." : "Analyze symptoms"}
             </button>
           </form>
+
+          {result && (
+            <section className="mt-6 border-t border-slate-200 pt-5">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold text-slate-950">Recommended doctors</h2>
+                {recommendedDoctors.length > 0 && (
+                  <span className="text-xs font-medium text-slate-500">{recommendedDoctors.length} matches</span>
+                )}
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {recommendedDoctors.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                    No doctor recommendations were returned.
+                  </p>
+                ) : (
+                  recommendedDoctors.map((doctor) => (
+                    <article
+                      key={doctor.id}
+                      className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
+                    >
+                      <div className="flex gap-3">
+                        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-cyan-50 text-cyan-800 ring-1 ring-cyan-100">
+                          <div className="flex h-full w-full items-center justify-center text-sm font-semibold">
+                            {getDoctorInitials(doctor.name) || "DR"}
+                          </div>
+                          {doctor.profileImageUrl && (
+                            <img
+                              src={doctor.profileImageUrl}
+                              alt={doctor.name}
+                              className="absolute inset-0 h-full w-full object-cover"
+                              onError={(event) => {
+                                event.currentTarget.style.display = "none";
+                              }}
+                            />
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <h3 className="truncate text-sm font-semibold text-slate-950">{doctor.name}</h3>
+                              <p className="truncate text-xs font-medium text-cyan-700">
+                                {doctor.specialization}
+                              </p>
+                            </div>
+                            <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                              {doctor.matchScore}
+                            </span>
+                          </div>
+
+                          <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+                            <p>
+                              <span className="font-semibold text-slate-800">Experience:</span>{" "}
+                              {doctor.yearsOfExperience} years
+                            </p>
+                            <p>
+                              <span className="font-semibold text-slate-800">Distance:</span>{" "}
+                              {formatDoctorDistance(doctor.distanceKm)}
+                            </p>
+                            <p className="sm:col-span-2">
+                              <span className="font-semibold text-slate-800">Location:</span>{" "}
+                              {formatDoctorLocation(doctor)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  ))
+                )}
+              </div>
+            </section>
+          )}
         </section>
 
         <aside className="space-y-6">
@@ -322,13 +441,6 @@ export const SymptomChecker = () => {
                 <div className={`rounded-lg border px-4 py-3 ${urgencyStyles[result.urgencyLevel]}`}>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em]">Urgency</p>
                   <p className="mt-1 text-xl font-semibold capitalize">{result.urgencyLevel}</p>
-                </div>
-
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                    Recommended doctor
-                  </p>
-                  <p className="mt-1 text-lg font-semibold text-slate-950">{result.recommendedDoctor}</p>
                 </div>
 
                 <div>
